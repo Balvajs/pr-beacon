@@ -1,0 +1,45 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": null,
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "pedantic": "error",
+    "perf": "error",
+    "style": "error",
+    "restriction": "error",
+    "nursery": "error"
+  },
+  "rules": {
+    "sort-imports": "off",
+    "no-ternary": "off",
+    "no-undefined": "off",
+    "no-magic-numbers": [
+      "error",
+      {
+        "ignore": [0]
+      }
+    ],
+    "max-lines-per-function": "off",
+    "max-statements": "off",
+    "init-declarations": "off",
+    "no-duplicate-imports": "off",
+    "require-await": "off",
+    "oxc/no-optional-chaining": "off",
+    "oxc/no-async-await": "off",
+    "oxc/no-rest-spread-properties": "off",
+    "typescript/prefer-readonly-parameter-types": "off",
+    "typescript/require-await": "off",
+    "typescript/consistent-type-definitions": ["error", "type"]
+  },
+  "settings": {
+    "vitest": {
+      "typecheck": false
+    }
+  },
+  "env": {
+    "builtin": true
+  },
+  "globals": {},
+  "ignorePatterns": ["dist/**", "dist-sdk/**", "dist-action/**"]
+}

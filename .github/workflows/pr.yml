@@ -1,0 +1,131 @@
+name: PR
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  format-check:
+    name: Format check
+    runs-on: ubuntu-latest
+    outputs:
+      outcome: ${{ steps.format-check.outcome }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+
+      - name: Check formatting
+        id: format-check
+        run: bun run format:check
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    outputs:
+      outcome: ${{ steps.lint.outcome }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+
+      - name: Lint
+        id: lint
+        run: bun run lint --format=github
+
+  build-check:
+    name: Build Check
+    runs-on: ubuntu-latest
+    outputs:
+      build-outcome: ${{ steps.build.outcome }}
+      dist-outcome: ${{ steps.check-changes.outcome }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+
+      - name: Build
+        id: build
+        run: bun run build
+
+      - name: Check for uncommitted changes
+        id: check-changes
+        run: |
+          if [[ -n $(git status --porcelain) ]]; then
+            git status
+            exit 1
+          fi
+
+  type-check:
+    name: Type Check
+    runs-on: ubuntu-latest
+    outputs:
+      outcome: ${{ steps.type-check.outcome }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+
+      - name: Type check
+        id: type-check
+        run: bun run type-check
+
+  beacon:
+    name: PR Beacon
+    needs: [format-check, lint, build-check, type-check]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Format check result
+        uses: ./
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fail: ${{ needs.format-check.outputs.outcome == 'failure' && 'Code formatting issues detected. Please run `bun run format` to fix them.' || '' }}
+          message: ${{ needs.format-check.outputs.outcome == 'success' && 'Code formatting is correct.' || '' }}
+          message-icon: ✅
+
+      - name: Lint result
+        uses: ./
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fail: ${{ needs.lint.outputs.outcome == 'failure' && 'Linting issues detected. Please run `bun run lint` to fix them.' || '' }}
+          message: ${{ needs.lint.outputs.outcome == 'success' && 'Linting is correct.' || '' }}
+          message-icon: ✅
+
+      - name: Build result
+        uses: ./
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fail: ${{ needs.build-check.outputs.build-outcome == 'failure' && 'Build failed. Please check the build logs for details.' || '' }}
+
+      - name: Dist result
+        uses: ./
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fail: ${{ needs.build-check.outputs.dist-outcome == 'failure' && 'Build output is not up to date. Please run `bun run build` and commit the changes.' || '' }}
+          message: ${{ needs.build-check.outputs.dist-outcome == 'success' && 'Build output is up to date.' || '' }}
+          message-icon: ✅
+
+      - name: Type check result
+        uses: ./
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fail: ${{ needs.type-check.outputs.outcome == 'failure' && 'Type checking failed. Please check the type-check logs for details.' || '' }}
+          message: ${{ needs.type-check.outputs.outcome == 'success' && 'Type checking passed.' || '' }}
+          message-icon: ✅

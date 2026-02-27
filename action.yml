@@ -1,0 +1,84 @@
+name: PR Beacon
+description: Posts and updates a sticky PR comment with CI information, warnings, and failures.
+
+inputs:
+  token:
+    description: GitHub token (GITHUB_TOKEN) used to post PR comments.
+    required: true
+
+  # ── JSON file (full config) ───────────────────────────────────────────────
+
+  json-file:
+    description: |
+      Path to a JSON file that defines the full beacon payload.
+      Use this when you need multiple rows or markdown sections.
+      Schema:
+        {
+          "fails":    [ string | { message, icon?, id? } ],
+          "warnings": [ string | { message, icon?, id? } ],
+          "messages": [ string | { message, icon?, id? } ],
+          "markdowns": [ { id, message } ],
+          "options": { "contentIdsToUpdate"?: string[] }
+        }
+    required: false
+    default: ''
+
+  # ── Individual inputs ──────────────────────────────────────────────────────
+
+  fail:
+    description: A single failure message to add to the Fails table.
+    required: false
+    default: ''
+
+  fail-icon:
+    description: Icon for the fail entry (e.g. "💥"). Only used when `fail` is set.
+    required: false
+    default: ''
+
+  fail-id:
+    description: ID for the fail entry, used for upsert. Only used when `fail` is set.
+    required: false
+    default: ''
+
+  warn:
+    description: A single warning message to add to the Warnings table.
+    required: false
+    default: ''
+
+  warn-icon:
+    description: Icon for the warn entry. Only used when `warn` is set.
+    required: false
+    default: ''
+
+  warn-id:
+    description: ID for the warn entry, used for upsert. Only used when `warn` is set.
+    required: false
+    default: ''
+
+  message:
+    description: A single message to add to the Messages table.
+    required: false
+    default: ''
+
+  message-icon:
+    description: Icon for the message entry. Only used when `message` is set.
+    required: false
+    default: ''
+
+  message-id:
+    description: ID for the message entry, used for upsert. Only used when `message` is set.
+    required: false
+    default: ''
+
+  # ── Submit options ─────────────────────────────────────────────────────────
+
+  content-ids-to-update:
+    description: |
+      Comma-separated list of content IDs that should be removed before new content
+      is added. Useful in subsequent jobs that own specific named sections.
+    required: false
+    default: ''
+
+runs:
+  using: node24
+  main: dist-action/index.mjs
