@@ -5,13 +5,13 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
+  issues: write
 
 jobs:
   format-check:
     name: Format check
     runs-on: ubuntu-latest
-    outputs:
-      outcome: ${{ steps.format-check.outcome }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -23,11 +23,18 @@ jobs:
         id: format-check
         run: bun run format:check
 
+      - name: Run PR Beacon
+        if: always()
+        uses: ./
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fail: ${{ steps.format-check.outcome == 'failure' && 'Code formatting issues detected. Please run `bun run format` to fix them.' || '' }}
+          message: ${{ steps.format-check.outcome == 'success' && 'Code formatting is correct.' || '' }}
+          message-icon: ✅
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    outputs:
-      outcome: ${{ steps.lint.outcome }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -39,12 +46,18 @@ jobs:
         id: lint
         run: bun run lint --format=github
 
+      - name: Run PR Beacon
+        if: always()
+        uses: ./
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fail: ${{ steps.lint.outcome == 'failure' && 'Linting issues detected. Please run `bun run lint` to fix them.' || '' }}
+          message: ${{ steps.lint.outcome == 'success' && 'Linting is correct.' || '' }}
+          message-icon: ✅
+
   build-check:
     name: Build Check
     runs-on: ubuntu-latest
-    outputs:
-      build-outcome: ${{ steps.build.outcome }}
-      dist-outcome: ${{ steps.check-changes.outcome }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -64,11 +77,25 @@ jobs:
             exit 1
           fi
 
+      - name: Run PR Beacon (build)
+        if: failure() && steps.build.outcome == 'failure'
+        uses: ./
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fail: Build failed. Please check the build logs for details.
+
+      - name: Run PR Beacon (dist)
+        if: always()
+        uses: ./
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fail: ${{ steps.check-changes.outcome == 'failure' && 'Build output is not up to date. Please run `bun run build` and commit the changes.' || '' }}
+          message: ${{ steps.check-changes.outcome == 'success' && 'Build output is up to date.' || '' }}
+          message-icon: ✅
+
   type-check:
     name: Type Check
     runs-on: ubuntu-latest
-    outputs:
-      outcome: ${{ steps.type-check.outcome }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -80,52 +107,11 @@ jobs:
         id: type-check
         run: bun run type-check
 
-  beacon:
-    name: PR Beacon
-    needs: [format-check, lint, build-check, type-check]
-    if: always()
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Format check result
+      - name: Run PR Beacon
+        if: always()
         uses: ./
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          fail: ${{ needs.format-check.outputs.outcome == 'failure' && 'Code formatting issues detected. Please run `bun run format` to fix them.' || '' }}
-          message: ${{ needs.format-check.outputs.outcome == 'success' && 'Code formatting is correct.' || '' }}
-          message-icon: ✅
-
-      - name: Lint result
-        uses: ./
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fail: ${{ needs.lint.outputs.outcome == 'failure' && 'Linting issues detected. Please run `bun run lint` to fix them.' || '' }}
-          message: ${{ needs.lint.outputs.outcome == 'success' && 'Linting is correct.' || '' }}
-          message-icon: ✅
-
-      - name: Build result
-        uses: ./
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fail: ${{ needs.build-check.outputs.build-outcome == 'failure' && 'Build failed. Please check the build logs for details.' || '' }}
-
-      - name: Dist result
-        uses: ./
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fail: ${{ needs.build-check.outputs.dist-outcome == 'failure' && 'Build output is not up to date. Please run `bun run build` and commit the changes.' || '' }}
-          message: ${{ needs.build-check.outputs.dist-outcome == 'success' && 'Build output is up to date.' || '' }}
-          message-icon: ✅
-
-      - name: Type check result
-        uses: ./
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fail: ${{ needs.type-check.outputs.outcome == 'failure' && 'Type checking failed. Please check the type-check logs for details.' || '' }}
-          message: ${{ needs.type-check.outputs.outcome == 'success' && 'Type checking passed.' || '' }}
+          fail: ${{ steps.type-check.outcome == 'failure' && 'Type checking failed. Please check the type-check logs for details.' || '' }}
+          message: ${{ steps.type-check.outcome == 'success' && 'Type checking passed.' || '' }}
           message-icon: ✅
