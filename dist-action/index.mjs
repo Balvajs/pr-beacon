@@ -4,7 +4,7 @@ import { getInput, info, setFailed } from "@actions/core";
 import { z } from "zod";
 import { context } from "@actions/github";
 import { marked } from "marked";
-import { diff, retry, sleep, unique } from "radashi";
+import { diff, retry, shake, sleep, unique } from "radashi";
 import picocolors from "picocolors";
 
 //#region \0rolldown/runtime.js
@@ -1224,7 +1224,7 @@ var PrBeacon = class PrBeacon {
 		this.tables.fails.push({
 			id: getDefaultContentId(),
 			message: markdownToHtml === true ? convertMarkdownToHtml(message) : message,
-			...meta
+			...shake(meta)
 		});
 	}
 	/**
@@ -1234,7 +1234,7 @@ var PrBeacon = class PrBeacon {
 		this.tables.warnings.push({
 			id: getDefaultContentId(),
 			message: markdownToHtml === true ? convertMarkdownToHtml(message) : message,
-			...meta
+			...shake(meta)
 		});
 	}
 	/**
@@ -1244,7 +1244,7 @@ var PrBeacon = class PrBeacon {
 		this.tables.messages.push({
 			id: getDefaultContentId(),
 			message: markdownToHtml === true ? convertMarkdownToHtml(message) : message,
-			...meta
+			...shake(meta)
 		});
 	}
 	/**

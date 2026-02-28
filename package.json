@@ -19,6 +19,7 @@
     "format:check": "oxfmt --check",
     "lint": "oxlint --type-aware",
     "lint:fix": "oxlint --type-aware --fix",
+    "prepare": "husky",
     "test": "vitest",
     "type-check": "tsgo --build"
   },
@@ -33,6 +34,8 @@
   "devDependencies": {
     "@types/node": "25.3.2",
     "@typescript/native-preview": "7.0.0-dev.20260227.1",
+    "husky": "9.1.7",
+    "lint-staged": "16.3.0",
     "oxfmt": "0.35.0",
     "oxlint": "1.50.0",
     "oxlint-tsgolint": "0.15.0",

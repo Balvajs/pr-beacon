@@ -3,6 +3,7 @@ import process from 'node:process';
 import { setFailed } from '@actions/core';
 import { context as githubContext } from '@actions/github';
 import { marked } from 'marked';
+import { shake } from 'radashi';
 
 import { updateMarkdowns } from './beacon-markdown';
 import type { TableRowMessage, TableType } from './beacon-table';
@@ -117,7 +118,7 @@ export class PrBeacon {
     this.tables.fails.push({
       id: getDefaultContentId(),
       message: markdownToHtml === true ? convertMarkdownToHtml(message) : message,
-      ...meta,
+      ...shake(meta),
     });
   }
 
@@ -137,7 +138,7 @@ export class PrBeacon {
     this.tables.warnings.push({
       id: getDefaultContentId(),
       message: markdownToHtml === true ? convertMarkdownToHtml(message) : message,
-      ...meta,
+      ...shake(meta),
     });
   }
 
@@ -157,7 +158,7 @@ export class PrBeacon {
     this.tables.messages.push({
       id: getDefaultContentId(),
       message: markdownToHtml === true ? convertMarkdownToHtml(message) : message,
-      ...meta,
+      ...shake(meta),
     });
   }
 
