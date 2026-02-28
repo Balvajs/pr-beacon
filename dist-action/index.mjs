@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
 import process$1 from "node:process";
 import { getInput, info, setFailed } from "@actions/core";
+import { diff, retry, shake, sleep, unique } from "radashi";
 import { z } from "zod";
 import { context } from "@actions/github";
 import { marked } from "marked";
-import { diff, unique } from "radashi";
 import picocolors from "picocolors";
 
 //#region \0rolldown/runtime.js
@@ -1102,40 +1102,63 @@ const getPrContext = () => ({
 
 //#endregion
 //#region src/sdk/comment-pr.ts
+const MAX_RETRIES = 5;
+const RETRY_DELAY_MS = 500;
+const findBeaconComment = async (octokit, prContext, commentFooter) => {
+	for await (const page of octokit.paginate.iterator("GET /repos/{owner}/{repo}/issues/{issue_number}/comments", prContext)) {
+		const found = page.data.find((comment) => Boolean(comment.body?.includes(commentFooter)));
+		if (found) return found;
+	}
+};
 /**
 * Function that adds comment to the PR found in Github Action context
 *
-* Operates in `upsert` mode which creates sticky comment (it stays in the same place in the PR comment section)
+* Operates in `upsert` mode which creates sticky comment (it stays in the same place in the PR comment section).
+*
+* Uses optimistic locking with read-after-write verification to handle concurrent writes from
+* parallel CI jobs. If another job overwrites the comment between our write and the verification
+* read, we retry up to MAX_RETRIES times, re-fetching the latest body each time so no update
+* is ever lost.
 */
 const commentPr = async ({ githubToken, markdown, commentId }) => {
 	const octokit = getOctokit({ token: githubToken });
 	const prContext = getPrContext();
 	const commentFooter = `<!--dx-github-pr-generated-comment:${commentId}-->`;
-	let previousPrComment;
-	for await (const prComments of octokit.paginate.iterator("GET /repos/{owner}/{repo}/issues/{issue_number}/comments", prContext)) {
-		previousPrComment = prComments.data.find((comment) => Boolean(comment.body?.includes(commentFooter)));
-		if (previousPrComment) break;
-	}
-	const body = typeof markdown === "string" ? `${markdown}\n${commentFooter}` : `${markdown(previousPrComment?.body?.replace(commentFooter, ""))}${commentFooter}`;
-	if (!previousPrComment) {
-		await octokit.request("POST /repos/{owner}/{repo}/issues/{issue_number}/comments", {
+	let attempts = 0;
+	return retry({
+		delay: RETRY_DELAY_MS,
+		times: MAX_RETRIES
+	}, async () => {
+		const existingComment = await findBeaconComment(octokit, prContext, commentFooter);
+		const previousBody = existingComment?.body?.replace(commentFooter, "");
+		const body = typeof markdown === "string" ? `${markdown}\n${commentFooter}` : `${markdown(previousBody)}${commentFooter}`;
+		if (existingComment === void 0) {
+			await octokit.request("POST /repos/{owner}/{repo}/issues/{issue_number}/comments", {
+				...prContext,
+				body
+			});
+			return {
+				action: "create",
+				commentBody: body
+			};
+		}
+		await octokit.request("PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}", {
 			...prContext,
-			body
+			body,
+			comment_id: existingComment.id
 		});
-		return {
-			action: "create",
+		await sleep(RETRY_DELAY_MS);
+		const { data: verification } = await octokit.request("GET /repos/{owner}/{repo}/issues/comments/{comment_id}", {
+			...prContext,
+			comment_id: existingComment.id
+		});
+		if (verification.body === body) return {
+			action: "upsert",
 			commentBody: body
 		};
-	}
-	await octokit.request("POST /repos/{owner}/{repo}/issues/comments/{comment_id}", {
-		...prContext,
-		body,
-		comment_id: previousPrComment.id
+		attempts += 1;
+		throw new Error(`Failed to write PR beacon comment after ${attempts} attempts due to concurrent updates.`);
 	});
-	return {
-		action: "upsert",
-		commentBody: body
-	};
 };
 
 //#endregion
@@ -1275,7 +1298,7 @@ var PrBeacon = class PrBeacon {
 			githubToken: this.githubToken,
 			markdown: updateReport
 		});
-		if (this.hasFails()) setFailed(`Check failed with ${this.tables.fails.length} errors!`);
+		if (this.hasFails() && options.shouldFailOnFailMessage === true) setFailed(`Check failed with ${this.tables.fails.length} errors!`);
 		return commentResult;
 	}
 };
@@ -1304,15 +1327,11 @@ const tableRowSchema = z.union([z.string(), z.object({
 	id: z.string().optional(),
 	message: z.string()
 })]);
-/** A single row, or an array of rows, for fail / warn / message inputs. */
-const tableRowInputSchema = z.union([tableRowSchema, z.array(tableRowSchema)]);
 const markdownEntrySchema = z.object({
 	id: z.string(),
 	message: z.string()
 });
-/** A single markdown section, or an array of them. */
-const markdownInputSchema = z.union([markdownEntrySchema, z.array(markdownEntrySchema)]);
-/** Full JSON payload accepted by the `json` / `json-file` inputs. */
+/** Full JSON payload accepted by the `json-file` input. */
 const jsonPayloadSchema = z.object({
 	fails: z.array(tableRowSchema).optional(),
 	markdowns: z.array(markdownEntrySchema).optional(),
@@ -1325,23 +1344,6 @@ const optionalInput = (name) => {
 	const value = getInput(name);
 	return value === "" ? void 0 : value;
 };
-/**
-* Parse a raw action input as JSON.
-* For `fail`, `warn`, and `message` inputs a plain (non-JSON) string is also
-* accepted and treated as a bare message string.
-*/
-const parseJsonInput = (raw, allowPlainString) => {
-	try {
-		return JSON.parse(raw);
-	} catch {
-		if (allowPlainString) return raw;
-		throw new Error(`Could not parse value as JSON: ${raw}`);
-	}
-};
-/** Normalise a row input to an array. */
-const toRowArray = (value) => Array.isArray(value) ? value : [value];
-/** Normalise a markdown input to an array. */
-const toMarkdownArray = (value) => Array.isArray(value) ? value : [value];
 /** Unpack a table-row input into `(message, meta)` arguments. */
 const unpackRow = (row) => {
 	if (typeof row === "string") return [row, { markdownToHtml: true }];
@@ -1362,54 +1364,64 @@ const applyJsonPayload = (prBeacon, jsonPayload) => {
 	for (const row of jsonPayload.messages ?? []) if (!isEmptyRow(row)) prBeacon.message(...unpackRow(row));
 	for (const { id, message } of jsonPayload.markdowns ?? []) if (message.trim().length > 0) prBeacon.markdown(id, message);
 };
-/** Apply rows coming from individual action inputs. */
+/** Apply plain-string rows coming from individual action inputs. */
 const applyIndividualInputs = (prBeacon, inputs) => {
-	const { failInput, warnInput, messageInput, markdownInput } = inputs;
-	if (failInput !== void 0) {
-		const parsed = tableRowInputSchema.parse(parseJsonInput(failInput, true));
-		for (const row of toRowArray(parsed)) prBeacon.fail(...unpackRow(row));
-	}
-	if (warnInput !== void 0) {
-		const parsed = tableRowInputSchema.parse(parseJsonInput(warnInput, true));
-		for (const row of toRowArray(parsed)) prBeacon.warn(...unpackRow(row));
-	}
-	if (messageInput !== void 0) {
-		const parsed = tableRowInputSchema.parse(parseJsonInput(messageInput, true));
-		for (const row of toRowArray(parsed)) prBeacon.message(...unpackRow(row));
-	}
-	if (markdownInput !== void 0) {
-		const parsed = markdownInputSchema.parse(parseJsonInput(markdownInput, false));
-		for (const { id, message } of toMarkdownArray(parsed)) prBeacon.markdown(id, message);
-	}
+	const { failInput, failIcon, failId, warnInput, warnIcon, warnId, messageInput, messageIcon, messageId } = shake(inputs, (value) => typeof value === "string" && value.trim().length > 0);
+	if (failInput !== void 0) prBeacon.fail(failInput, {
+		icon: failIcon,
+		id: failId,
+		markdownToHtml: true
+	});
+	if (warnInput !== void 0) prBeacon.warn(warnInput, {
+		icon: warnIcon,
+		id: warnId,
+		markdownToHtml: true
+	});
+	if (messageInput !== void 0) prBeacon.message(messageInput, {
+		icon: messageIcon,
+		id: messageId,
+		markdownToHtml: true
+	});
 };
 try {
 	process$1.env.GITHUB_TOKEN = getInput("token", { required: true });
-	const jsonInline = optionalInput("json");
 	const jsonFile = optionalInput("json-file");
-	if (jsonInline !== void 0 && jsonFile !== void 0) throw new Error("Inputs 'json' and 'json-file' are mutually exclusive – provide only one.");
 	let jsonPayload;
-	if (jsonInline !== void 0) jsonPayload = jsonPayloadSchema.parse(parseJsonInput(jsonInline, false));
-	else if (jsonFile !== void 0) {
+	if (jsonFile !== void 0) {
 		const raw = readFileSync(jsonFile, "utf8");
-		jsonPayload = jsonPayloadSchema.parse(parseJsonInput(raw, false));
+		jsonPayload = jsonPayloadSchema.parse(JSON.parse(raw));
 	}
 	const failInput = optionalInput("fail");
+	const failIcon = optionalInput("fail-icon");
+	const failId = optionalInput("fail-id");
 	const warnInput = optionalInput("warn");
+	const warnIcon = optionalInput("warn-icon");
+	const warnId = optionalInput("warn-id");
 	const messageInput = optionalInput("message");
-	const markdownInput = optionalInput("markdown");
+	const messageIcon = optionalInput("message-icon");
+	const messageId = optionalInput("message-id");
 	const contentIdsToUpdateRaw = optionalInput("content-ids-to-update");
+	const shouldFailOnFailMessage = optionalInput("fail-on-fail-message") === "true";
 	const contentIdsToUpdate = contentIdsToUpdateRaw === void 0 || contentIdsToUpdateRaw === "" ? void 0 : contentIdsToUpdateRaw.split(",").map((entry) => entry.trim()).filter(Boolean);
 	const resolvedContentIdsToUpdate = jsonPayload?.options?.contentIdsToUpdate ?? contentIdsToUpdate;
 	const buildBeaconCallback = (prBeacon) => {
 		if (jsonPayload !== void 0) applyJsonPayload(prBeacon, jsonPayload);
 		applyIndividualInputs(prBeacon, {
+			failIcon,
+			failId,
 			failInput,
-			markdownInput,
+			messageIcon,
+			messageId,
 			messageInput,
+			warnIcon,
+			warnId,
 			warnInput
 		});
 	};
-	await submitPrBeacon(buildBeaconCallback, { contentIdsToUpdate: resolvedContentIdsToUpdate });
+	await submitPrBeacon(buildBeaconCallback, {
+		contentIdsToUpdate: resolvedContentIdsToUpdate,
+		shouldFailOnFailMessage
+	});
 } catch (error) {
 	setFailed(error instanceof Error ? error.message : String(error));
 }

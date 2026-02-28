@@ -74,6 +74,7 @@ jobs:
         id: verify-changed-files
         with:
           separator: ","
+          fail-if-changed: true
 
       - name: Run PR Beacon (build)
         if: failure() && steps.build.outcome == 'failure'
