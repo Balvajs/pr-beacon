@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
 import process$1 from "node:process";
 import { getInput, info, setFailed } from "@actions/core";
-import { diff, retry, shake, sleep, unique } from "radashi";
 import { z } from "zod";
 import { context } from "@actions/github";
 import { marked } from "marked";
+import { diff, retry, sleep, unique } from "radashi";
 import picocolors from "picocolors";
 
 //#region \0rolldown/runtime.js
@@ -1366,7 +1366,7 @@ const applyJsonPayload = (prBeacon, jsonPayload) => {
 };
 /** Apply plain-string rows coming from individual action inputs. */
 const applyIndividualInputs = (prBeacon, inputs) => {
-	const { failInput, failIcon, failId, warnInput, warnIcon, warnId, messageInput, messageIcon, messageId } = shake(inputs, (value) => typeof value === "string" && value.trim().length > 0);
+	const { failInput, failIcon, failId, warnInput, warnIcon, warnId, messageInput, messageIcon, messageId } = inputs;
 	if (failInput !== void 0) prBeacon.fail(failInput, {
 		icon: failIcon,
 		id: failId,

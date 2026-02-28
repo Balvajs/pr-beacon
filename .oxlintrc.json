@@ -22,6 +22,7 @@
     ],
     "max-lines-per-function": "off",
     "max-statements": "off",
+    "max-lines": "off",
     "init-declarations": "off",
     "no-duplicate-imports": "off",
     "require-await": "off",
