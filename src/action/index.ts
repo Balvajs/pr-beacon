@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs';
 import process from 'node:process';
 
 import { getInput, setFailed } from '@actions/core';
-import { shake } from 'radashi';
 import { z } from 'zod';
 
 import { submitPrBeacon } from '../sdk/index';
@@ -120,7 +119,7 @@ const applyIndividualInputs = (prBeacon: PrBeaconArg, inputs: IndividualInputs):
     messageInput,
     messageIcon,
     messageId,
-  } = shake(inputs, (value) => typeof value === 'string' && value.trim().length > 0);
+  } = inputs;
 
   if (failInput !== undefined) {
     prBeacon.fail(failInput, { icon: failIcon, id: failId, markdownToHtml: true });

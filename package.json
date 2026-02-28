@@ -19,6 +19,7 @@
     "format:check": "oxfmt --check",
     "lint": "oxlint --type-aware",
     "lint:fix": "oxlint --type-aware --fix",
+    "test": "vitest",
     "type-check": "tsgo --build"
   },
   "dependencies": {
@@ -35,7 +36,8 @@
     "oxfmt": "0.35.0",
     "oxlint": "1.50.0",
     "oxlint-tsgolint": "0.15.0",
-    "tsdown": "0.21.0-beta.2"
+    "tsdown": "0.21.0-beta.2",
+    "vitest": "4.0.18"
   },
   "engines": {
     "node": ">=24"

@@ -38,7 +38,8 @@
     }
   },
   "env": {
-    "builtin": true
+    "builtin": true,
+    "node": true
   },
   "globals": {},
   "ignorePatterns": ["dist/**", "dist-sdk/**", "dist-action/**"]
