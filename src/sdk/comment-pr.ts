@@ -1,11 +1,42 @@
 import type { PaginatingEndpoints } from '@octokit/plugin-paginate-rest';
+import { sleep, retry } from 'radashi';
 
 import { getOctokit, getPrContext } from './get-octokit';
+
+const MAX_RETRIES = 5;
+const RETRY_DELAY_MS = 500;
+
+type PrComment =
+  PaginatingEndpoints['GET /repos/{owner}/{repo}/issues/{issue_number}/comments']['response']['data'][0];
+
+const findBeaconComment = async (
+  octokit: ReturnType<typeof getOctokit>,
+  prContext: ReturnType<typeof getPrContext>,
+  commentFooter: string,
+): Promise<PrComment | undefined> => {
+  for await (const page of octokit.paginate.iterator(
+    'GET /repos/{owner}/{repo}/issues/{issue_number}/comments',
+    prContext,
+  )) {
+    const found = page.data.find((comment) => Boolean(comment.body?.includes(commentFooter)));
+
+    if (found) {
+      return found;
+    }
+  }
+
+  return undefined;
+};
 
 /**
  * Function that adds comment to the PR found in Github Action context
  *
- * Operates in `upsert` mode which creates sticky comment (it stays in the same place in the PR comment section)
+ * Operates in `upsert` mode which creates sticky comment (it stays in the same place in the PR comment section).
+ *
+ * Uses optimistic locking with read-after-write verification to handle concurrent writes from
+ * parallel CI jobs. If another job overwrites the comment between our write and the verification
+ * read, we retry up to MAX_RETRIES times, re-fetching the latest body each time so no update
+ * is ever lost.
  */
 export const commentPr = async ({
   githubToken,
@@ -32,43 +63,47 @@ export const commentPr = async ({
 
   const commentFooter = `<!--dx-github-pr-generated-comment:${commentId}-->`;
 
-  let previousPrComment:
-    | PaginatingEndpoints['GET /repos/{owner}/{repo}/issues/{issue_number}/comments']['response']['data'][0]
-    | undefined;
+  let attempts = 0;
+  return retry({ delay: RETRY_DELAY_MS, times: MAX_RETRIES }, async () => {
+    // Re-fetch on every attempt so we always build on the latest body
+    const existingComment = await findBeaconComment(octokit, prContext, commentFooter);
 
-  // Paginate through comments until comment with footer is found
-  for await (const prComments of octokit.paginate.iterator(
-    'GET /repos/{owner}/{repo}/issues/{issue_number}/comments',
-    prContext,
-  )) {
-    previousPrComment = prComments.data.find((comment) =>
-      Boolean(comment.body?.includes(commentFooter)),
-    );
+    const previousBody = existingComment?.body?.replace(commentFooter, '');
+    const body =
+      typeof markdown === 'string'
+        ? `${markdown}\n${commentFooter}`
+        : `${markdown(previousBody)}${commentFooter}`;
 
-    if (previousPrComment) {
-      break;
+    if (existingComment === undefined) {
+      await octokit.request('POST /repos/{owner}/{repo}/issues/{issue_number}/comments', {
+        ...prContext,
+        body,
+      });
+
+      return { action: 'create', commentBody: body };
     }
-  }
 
-  const body =
-    typeof markdown === 'string'
-      ? `${markdown}\n${commentFooter}`
-      : `${markdown(previousPrComment?.body?.replace(commentFooter, ''))}${commentFooter}`;
-
-  if (!previousPrComment) {
-    await octokit.request('POST /repos/{owner}/{repo}/issues/{issue_number}/comments', {
+    await octokit.request('PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}', {
       ...prContext,
       body,
+      comment_id: existingComment.id,
     });
 
-    return { action: 'create', commentBody: body };
-  }
+    // Read back to verify our write was not clobbered by a concurrent job
+    await sleep(RETRY_DELAY_MS);
+    const { data: verification } = await octokit.request(
+      'GET /repos/{owner}/{repo}/issues/comments/{comment_id}',
+      { ...prContext, comment_id: existingComment.id },
+    );
 
-  await octokit.request('POST /repos/{owner}/{repo}/issues/comments/{comment_id}', {
-    ...prContext,
-    body,
-    comment_id: previousPrComment.id,
+    if (verification.body === body) {
+      return { action: 'upsert', commentBody: body };
+    }
+
+    attempts += 1;
+
+    throw new Error(
+      `Failed to write PR beacon comment after ${attempts} attempts due to concurrent updates.`,
+    );
   });
-
-  return { action: 'upsert', commentBody: body };
 };
