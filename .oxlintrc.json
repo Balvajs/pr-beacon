@@ -17,7 +17,7 @@
     "no-magic-numbers": [
       "error",
       {
-        "ignore": [0]
+        "ignore": [0, 1, -1]
       }
     ],
     "max-lines-per-function": "off",

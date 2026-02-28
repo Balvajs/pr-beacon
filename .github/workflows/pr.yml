@@ -69,13 +69,11 @@ jobs:
         id: build
         run: bun run build
 
-      - name: Check for uncommitted changes
-        id: check-changes
-        run: |
-          if [[ -n $(git status --porcelain) ]]; then
-            git status
-            exit 1
-          fi
+      - name: Verify Changed files
+        uses: tj-actions/verify-changed-files@a1c6acee9df209257a246f2cc6ae8cb6581c1edf # v20.0.4
+        id: verify-changed-files
+        with:
+          separator: ","
 
       - name: Run PR Beacon (build)
         if: failure() && steps.build.outcome == 'failure'
@@ -84,14 +82,33 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fail: Build failed. Please check the build logs for details.
 
+      - name: Build dist fail message
+        id: dist-fail-message
+        if: steps.verify-changed-files.outputs.files_changed == 'true'
+        env:
+          CHANGED_FILES: ${{ steps.verify-changed-files.outputs.changed_files }}
+        run: |
+          IFS=',' read -ra FILES <<< "$CHANGED_FILES"
+          LIST_ITEMS=""
+          for file in "${FILES[@]}"; do
+            LIST_ITEMS="${LIST_ITEMS}<li>${file}</li>"
+          done
+          MESSAGE="<details><summary>Build output is not up to date. Please run \`bun run build\` and commit the changes.</summary><ul>${LIST_ITEMS}</ul></details>"
+          {
+            echo 'message<<EOF'
+            echo "$MESSAGE"
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+
       - name: Run PR Beacon (dist)
         if: always()
         uses: ./
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          fail: ${{ steps.check-changes.outcome == 'failure' && 'Build output is not up to date. Please run `bun run build` and commit the changes.' || '' }}
-          message: ${{ steps.check-changes.outcome == 'success' && 'Build output is up to date.' || '' }}
+          fail: ${{ steps.verify-changed-files.outputs.files_changed == 'true' && steps.dist-fail-message.outputs.message || '' }}
+          message: ${{ steps.verify-changed-files.outputs.files_changed == 'false' && 'Build output is up to date.' || '' }}
           message-icon: ✅
+          fail-on-fail-message: true
 
   type-check:
     name: Type Check

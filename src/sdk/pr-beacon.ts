@@ -203,6 +203,10 @@ export class PrBeacon {
        * @default [`${workflow}/${job}`] — the current workflow + job name combination
        */
       contentIdsToUpdate?: string[];
+      /**
+       * If true, the CI step will fail when there is at least one message in `Fails` table.
+       */
+      shouldFailOnFailMessage?: boolean;
     } = {},
   ): Promise<ReturnType<typeof commentPr>> {
     const { contentIdsToUpdate = [getDefaultContentId()] } = options;
@@ -233,7 +237,7 @@ export class PrBeacon {
       markdown: updateReport,
     });
 
-    if (this.hasFails()) {
+    if (this.hasFails() && options.shouldFailOnFailMessage === true) {
       setFailed(`Check failed with ${this.tables.fails.length} errors!`);
     }
 

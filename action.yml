@@ -79,6 +79,12 @@ inputs:
     required: false
     default: ''
 
+  fail-on-fail-message:
+    description: |
+      If true, the action will fail (exit with non-zero code) if there is a fail message in the beacon.
+    required: false
+    default: 'false'
+
 runs:
   using: node24
   main: dist-action/index.mjs

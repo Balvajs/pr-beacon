@@ -164,6 +164,7 @@ try {
 
   // -- Submit options --------------------------------------------------------
   const contentIdsToUpdateRaw = optionalInput('content-ids-to-update');
+  const shouldFailOnFailMessage = optionalInput('fail-on-fail-message') === 'true';
 
   const contentIdsToUpdate =
     contentIdsToUpdateRaw === undefined || contentIdsToUpdateRaw === ''
@@ -196,6 +197,7 @@ try {
 
   await submitPrBeacon(buildBeaconCallback, {
     contentIdsToUpdate: resolvedContentIdsToUpdate,
+    shouldFailOnFailMessage,
   });
 } catch (error) {
   setFailed(error instanceof Error ? error.message : String(error));
