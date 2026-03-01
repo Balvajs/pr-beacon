@@ -88,7 +88,7 @@ describe('PrBeacon constructor', () => {
 
   it('throws when no token is available', () => {
     delete process.env.GITHUB_TOKEN;
-    expect(() => new PrBeacon()).toThrow(/Github token is not provided/);
+    expect(() => new PrBeacon()).toThrow(/GitHub token is not provided/);
   });
 });
 

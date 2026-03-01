@@ -54,13 +54,17 @@ const getDiff = (
   if (diff > 0) {
     return `(+${diff}%${withEmoji ? ' 🟢' : ''})`;
   }
-  return `(±${diff})`;
+  return `(±${diff}%)`;
 };
 
-const calculateAvgCoverage = (fileCoverage: FileCoverage): number => {
+const calculateAvgCoverage = (fileCoverage: FileCoverage): number | 'Unknown' => {
   const pcts = Object.values(fileCoverage)
     .map(({ pct }) => pct)
     .filter((pct): pct is number => typeof pct === 'number');
+
+  if (pcts.length === 0) {
+    return 'Unknown';
+  }
   const avg = pcts.reduce((sum, pct) => sum + pct, 0) / pcts.length;
   return Math.round((avg + Number.EPSILON) * PERCENTS_MULTIPLIER) / PERCENTS_MULTIPLIER;
 };

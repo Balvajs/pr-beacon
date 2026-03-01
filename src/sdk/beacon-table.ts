@@ -1,6 +1,6 @@
 import { info } from '@actions/core';
 import picocolors from 'picocolors';
-import { unique } from 'radashi';
+import { unique, escapeHTML } from 'radashi';
 
 export type TableRowMessage = {
   message: string;
@@ -50,7 +50,7 @@ const tableRowTemplate = ({
   message: TableRowMessage;
   tableType: TableType;
 }): string =>
-  `<tr${id === undefined ? '' : ` data-id="${id}"`}><td>${icon ?? tableTypes[tableType].icon}</td><td>${message}</td></tr>`;
+  `<tr${id === undefined ? '' : ` data-id="${escapeHTML(id)}"`}><td>${icon ?? tableTypes[tableType].icon}</td><td>${message}</td></tr>`;
 
 const createTable = ({
   messages,
@@ -90,10 +90,14 @@ const appendRowToTable = ({
   );
 };
 
+const escapeRegExp = (value: string): string =>
+  value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+
 const regexps = {
   table: (tableType: TableType): RegExp =>
     new RegExp(`${tableStartTag(tableType)}[\\s\\S]*?${tableEndTag(tableType)}`, 'gm'),
-  tableRowWithId: (id: string): RegExp => new RegExp(`<tr data-id="${id}">[\\S\\s]*?</tr>`, 'gm'),
+  tableRowWithId: (id: string): RegExp =>
+    new RegExp(`<tr data-id="${escapeRegExp(escapeHTML(id))}">[\\S\\s]*?</tr>`, 'gm'),
   tableWithContent: (tableType: TableType): RegExp =>
     new RegExp(
       `${tableStartTag(tableType)}[\\s\\S]*?<td>[\\s\\S]*?${tableEndTag(tableType)}`,

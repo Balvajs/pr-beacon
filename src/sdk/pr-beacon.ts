@@ -63,7 +63,7 @@ export class PrBeacon {
     githubToken,
   }: {
     /**
-     * Github token with `issues: write` and `pull-requests: write` scope, used for authentication when calling Github API
+     * GitHub token with `issues: write` and `pull-requests: write` scope, used for authentication when calling GitHub API
      *
      * @default process.env.GITHUB_TOKEN
      */
@@ -73,7 +73,7 @@ export class PrBeacon {
 
     if (token === undefined || token === '') {
       throw new Error(
-        'Github token is not provided. Please provide it as `githubToken` parameter or set it in `GITHUB_TOKEN` environment variable.',
+        'GitHub token is not provided. Please provide it as `githubToken` parameter or set it in `GITHUB_TOKEN` environment variable.',
       );
     }
 

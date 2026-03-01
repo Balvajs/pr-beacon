@@ -125,7 +125,7 @@ describe('commentPr – upsert (existing comment)', () => {
     const newContent = 'Updated content';
     mockRequest
       .mockResolvedValueOnce({ data: {} })
-      .mockResolvedValueOnce({ data: { body: `${newContent}${FOOTER}`, id: 11 } });
+      .mockResolvedValueOnce({ data: { body: `${newContent}\n${FOOTER}`, id: 11 } });
 
     await commentPr({
       commentId: 'PR-BEACON',

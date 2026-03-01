@@ -72,7 +72,7 @@ export const commentPr = async ({
     const body =
       typeof markdown === 'string'
         ? `${markdown}\n${commentFooter}`
-        : `${markdown(previousBody)}${commentFooter}`;
+        : `${markdown(previousBody)}\n${commentFooter}`;
 
     if (existingComment === undefined) {
       await octokit.request('POST /repos/{owner}/{repo}/issues/{issue_number}/comments', {

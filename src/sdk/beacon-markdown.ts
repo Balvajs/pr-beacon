@@ -1,4 +1,4 @@
-import { diff } from 'radashi';
+import { diff, escapeHTML } from 'radashi';
 
 export type MarkdownMessage = {
   message: string;
@@ -8,8 +8,14 @@ export type MarkdownMessage = {
 const markdownStartTag = (id: string): string => `<!--markdown-${id}-->`;
 const markdownEndTag = (id: string): string => `<!--markdown-${id}-end-->`;
 
+const escapeRegExp = (value: string): string =>
+  value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+
 const markdownSectionRegexp = (id: string): RegExp =>
-  new RegExp(`${markdownStartTag(id)}[\\S\\s]*?${markdownEndTag(id)}`, 'gm');
+  new RegExp(
+    `${markdownStartTag(escapeRegExp(escapeHTML(id)))}[\\S\\s]*?${markdownEndTag(escapeRegExp(escapeHTML(id)))}`,
+    'gm',
+  );
 
 const removeMarkdownsThatShouldBeUpdated = ({
   oldBeacon,
