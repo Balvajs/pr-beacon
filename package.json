@@ -1,0 +1,51 @@
+{
+  "name": "@balvajs/pr-beacon",
+  "version": "0.0.0",
+  "description": "DangerJS-inspired GitHub Action tool that posts and updates a single sticky PR comment with CI info and warnings.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Balvajs/pr-beacon.git"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./dist-sdk/index.mjs",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "bun run build:action && bun run build:sdk",
+    "build:action": "tsdown",
+    "build:sdk": "tsgo --project tsconfig.sdk.json",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "lint": "oxlint --type-aware",
+    "lint:fix": "oxlint --type-aware --fix",
+    "prepare": "husky",
+    "test": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "type-check": "tsgo --build"
+  },
+  "dependencies": {
+    "@actions/core": "3.0.0",
+    "@actions/github": "9.0.0",
+    "marked": "17.0.3",
+    "picocolors": "1.1.1",
+    "radashi": "12.7.2",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@octokit/openapi-types": "27.0.0",
+    "@types/node": "25.3.2",
+    "@typescript/native-preview": "7.0.0-dev.20260227.1",
+    "@vitest/coverage-v8": "4.0.18",
+    "husky": "9.1.7",
+    "lint-staged": "16.3.0",
+    "oxfmt": "0.35.0",
+    "oxlint": "1.50.0",
+    "oxlint-tsgolint": "0.15.0",
+    "tsdown": "0.21.0-beta.2",
+    "vitest": "4.0.18"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
