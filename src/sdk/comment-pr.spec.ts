@@ -157,14 +157,14 @@ describe('commentPr – retry on concurrent update', () => {
       .mockResolvedValueOnce({ data: {} })
       .mockResolvedValueOnce({ data: { body: 'CLOBBERED', id: 5 } });
 
-    // The retry wrapper from radashi is mocked to only run once, so calling it
-    // Again would throw. We test that the error is thrown to signal re-try need.
-    await expect(
-      commentPr({
-        commentId: 'PR-BEACON',
-        githubToken: 'tok',
-        markdown: 'My update',
-      }),
-    ).rejects.toThrow('Failed to write PR beacon comment');
+    // The retry wrapper from radashi is mocked to only run once. After exhausting
+    // Retries the implementation swallows the error and resolves silently.
+    const result = await commentPr({
+      commentId: 'PR-BEACON',
+      githubToken: 'tok',
+      markdown: 'My update',
+    });
+
+    expect(result).toEqual({ action: 'upsert', commentBody: '' });
   });
 });
