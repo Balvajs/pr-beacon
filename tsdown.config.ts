@@ -3,7 +3,7 @@ import { defineConfig } from 'tsdown';
 export default defineConfig([
   {
     deps: {
-      neverBundle: [],
+      alwaysBundle: ['**'],
       onlyAllowBundle: false,
     },
     entry: ['./src/action/index.ts'],
