@@ -7,6 +7,7 @@ permissions:
   contents: read
   pull-requests: write
   issues: write
+  actions: read
 
 jobs:
   format-check:
@@ -29,7 +30,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fail: ${{ steps.format-check.outcome == 'failure' && 'Code formatting issues detected. Please run `bun run format` to fix them.' || '' }}
-          message: ${{ steps.format-check.outcome == 'success' && 'Code formatting is correct.' || '' }}
+          message: ${{ steps.format-check.outcome == 'success' && 'Format' || '' }}
           message-icon: ✅
 
   lint:
@@ -52,7 +53,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fail: ${{ steps.lint.outcome == 'failure' && 'Linting issues detected. Please run `bun run lint` to fix them.' || '' }}
-          message: ${{ steps.lint.outcome == 'success' && 'Linting is correct.' || '' }}
+          message: ${{ steps.lint.outcome == 'success' && 'Lint' || '' }}
           message-icon: ✅
 
   build-check:
@@ -73,7 +74,7 @@ jobs:
         uses: tj-actions/verify-changed-files@a1c6acee9df209257a246f2cc6ae8cb6581c1edf # v20.0.4
         id: verify-changed-files
         with:
-          separator: ','
+          separator: ","
           fail-if-changed: true
 
       - name: Run PR Beacon (build)
@@ -107,7 +108,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fail: ${{ steps.verify-changed-files.outputs.files_changed == 'true' && steps.dist-fail-message.outputs.message || '' }}
-          message: ${{ steps.verify-changed-files.outputs.files_changed == 'false' && 'Build output is up to date.' || '' }}
+          message: ${{ steps.verify-changed-files.outputs.files_changed == 'false' && 'Build' || '' }}
           message-icon: ✅
           fail-on-fail-message: true
 
@@ -131,5 +132,48 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fail: ${{ steps.type-check.outcome == 'failure' && 'Type checking failed. Please check the type-check logs for details.' || '' }}
-          message: ${{ steps.type-check.outcome == 'success' && 'Type checking passed.' || '' }}
+          message: ${{ steps.type-check.outcome == 'success' && 'Type-check' || '' }}
           message-icon: ✅
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+
+      - name: Run tests with coverage
+        run: bun run test:coverage
+
+      - name: Download baseline coverage from merge base
+        id: download-baseline
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MERGE_BASE=$(git merge-base HEAD origin/main)
+          RUN_ID=$(gh run list \
+            --repo "${{ github.repository }}" \
+            --workflow ci.yml \
+            --commit "$MERGE_BASE" \
+            --status success \
+            --limit 1 \
+            --json databaseId \
+            --jq '.[0].databaseId')
+          if [ -n "$RUN_ID" ]; then
+            gh run download "$RUN_ID" \
+              --repo "${{ github.repository }}" \
+              --name coverage-baseline \
+              --dir coverage-baseline
+          fi
+
+      - name: Report coverage
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bun run .github/scripts/compare-coverage.ts

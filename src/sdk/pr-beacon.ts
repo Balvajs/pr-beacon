@@ -2,6 +2,7 @@ import process from 'node:process';
 
 import { setFailed } from '@actions/core';
 import { context as githubContext } from '@actions/github';
+import type { operations } from '@octokit/openapi-types';
 import { marked } from 'marked';
 import { shake } from 'radashi';
 
@@ -96,7 +97,9 @@ export class PrBeacon {
   /**
    * Helper function to get list of changed files in PR
    */
-  getChangedFiles = async (): Promise<Awaited<ReturnType<Octokit['paginate']>>> =>
+  getChangedFiles = async (): Promise<
+    operations['pulls/list-files']['responses']['200']['content']['application/json']
+  > =>
     this.octokit.paginate('GET /repos/{owner}/{repo}/pulls/{pull_number}/files', {
       ...prContext,
       per_page: 100,
