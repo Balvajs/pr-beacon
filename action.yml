@@ -88,3 +88,7 @@ inputs:
 runs:
   using: node24
   main: dist-action/index.mjs
+
+branding:
+  icon: table
+  color: yellow
