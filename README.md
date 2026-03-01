@@ -43,7 +43,7 @@ Each job owns its content slice via a **content ID** (defaulting to `workflow/jo
 ### Minimal — single message
 
 ```yaml
-- uses: Balvajs/pr-beacon@v1
+- uses: Balvajs/pr-beacon@1248b5b89c25f915cc9e65b8dcc99c2e7be8f973 # v1.0.0
   with:
     token: ${{ secrets.GITHUB_TOKEN }}
     message: Build completed successfully.
@@ -52,7 +52,7 @@ Each job owns its content slice via a **content ID** (defaulting to `workflow/jo
 ### Report a failure
 
 ```yaml
-- uses: Balvajs/pr-beacon@v1
+- uses: Balvajs/pr-beacon@1248b5b89c25f915cc9e65b8dcc99c2e7be8f973 # v1.0.0
   with:
     token: ${{ secrets.GITHUB_TOKEN }}
     fail: Tests failed on Node 22. See the [logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
@@ -61,7 +61,7 @@ Each job owns its content slice via a **content ID** (defaulting to `workflow/jo
 ### Report a warning
 
 ```yaml
-- uses: Balvajs/pr-beacon@v1
+- uses: Balvajs/pr-beacon@1248b5b89c25f915cc9e65b8dcc99c2e7be8f973 # v1.0.0
   with:
     token: ${{ secrets.GITHUB_TOKEN }}
     warn: Bundle size increased by 12 kB.
@@ -95,7 +95,7 @@ For complex scenarios — multiple rows, mixed severity levels, or markdown sect
 - name: Generate payload
   run: node scripts/generate-beacon-payload.js > beacon-payload.json
 
-- uses: Balvajs/pr-beacon@v1
+- uses: Balvajs/pr-beacon@1248b5b89c25f915cc9e65b8dcc99c2e7be8f973 # v1.0.0
   with:
     token: ${{ secrets.GITHUB_TOKEN }}
     json-file: beacon-payload.json
@@ -113,7 +113,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: npm test
         continue-on-error: true
-      - uses: Balvajs/pr-beacon@v1
+      - uses: Balvajs/pr-beacon@1248b5b89c25f915cc9e65b8dcc99c2e7be8f973 # v1.0.0
         if: always()
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -125,7 +125,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: npm run lint
         continue-on-error: true
-      - uses: Balvajs/pr-beacon@v1
+      - uses: Balvajs/pr-beacon@1248b5b89c25f915cc9e65b8dcc99c2e7be8f973 # v1.0.0
         if: always()
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -137,7 +137,7 @@ jobs:
 Use `content-ids-to-update` to remove content written by a specific earlier job before adding new content. This is useful in retry or follow-up jobs.
 
 ```yaml
-- uses: Balvajs/pr-beacon@v1
+- uses: Balvajs/pr-beacon@1248b5b89c25f915cc9e65b8dcc99c2e7be8f973 # v1.0.0
   with:
     token: ${{ secrets.GITHUB_TOKEN }}
     content-ids-to-update: 'CI / build'

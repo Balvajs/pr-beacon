@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import process$1 from "node:process";
-import { getInput, info, setFailed } from "@actions/core";
+import { getInput, info, setFailed, warning } from "@actions/core";
 import { z } from "zod";
 import { context } from "@actions/github";
 import { marked } from "marked";
@@ -1160,6 +1160,12 @@ const commentPr = async ({ githubToken, markdown, commentId }) => {
 		};
 		attempts += 1;
 		throw new Error(`Failed to write PR beacon comment after ${attempts} attempts due to concurrent updates.`);
+	}).catch(() => {
+		warning(`Failed to update PR comment after ${MAX_RETRIES} attempts due to concurrent updates.`);
+		return {
+			action: "upsert",
+			commentBody: ""
+		};
 	});
 };
 

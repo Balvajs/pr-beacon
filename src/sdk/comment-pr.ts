@@ -1,3 +1,4 @@
+import { warning } from '@actions/core';
 import type { PaginatingEndpoints } from '@octokit/plugin-paginate-rest';
 import { sleep, retry } from 'radashi';
 
@@ -80,7 +81,7 @@ export const commentPr = async ({
         body,
       });
 
-      return { action: 'create', commentBody: body };
+      return { action: 'create' as const, commentBody: body };
     }
 
     await octokit.request('PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}', {
@@ -97,7 +98,7 @@ export const commentPr = async ({
     );
 
     if (verification.body === body) {
-      return { action: 'upsert', commentBody: body };
+      return { action: 'upsert' as const, commentBody: body };
     }
 
     attempts += 1;
@@ -105,5 +106,10 @@ export const commentPr = async ({
     throw new Error(
       `Failed to write PR beacon comment after ${attempts} attempts due to concurrent updates.`,
     );
+  }).catch(() => {
+    // Ignore retries and fail silently if we can't update the comment after max attempts, to avoid breaking the build
+    warning(`Failed to update PR comment after ${MAX_RETRIES} attempts due to concurrent updates.`);
+
+    return { action: 'upsert' as const, commentBody: '' };
   });
 };
