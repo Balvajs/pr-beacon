@@ -4,7 +4,7 @@ import { getInput, info, setFailed } from "@actions/core";
 import { z } from "zod";
 import { context } from "@actions/github";
 import { marked } from "marked";
-import { diff, retry, shake, sleep, unique } from "radashi";
+import { diff, escapeHTML, retry, shake, sleep, unique } from "radashi";
 import picocolors from "picocolors";
 
 //#region \0rolldown/runtime.js
@@ -14,7 +14,8 @@ var __commonJSMin = (cb, mod) => () => (mod || cb((mod = { exports: {} }).export
 //#region src/sdk/beacon-markdown.ts
 const markdownStartTag = (id) => `<!--markdown-${id}-->`;
 const markdownEndTag = (id) => `<!--markdown-${id}-end-->`;
-const markdownSectionRegexp = (id) => new RegExp(`${markdownStartTag(id)}[\\S\\s]*?${markdownEndTag(id)}`, "gm");
+const escapeRegExp$1 = (value) => value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+const markdownSectionRegexp = (id) => new RegExp(`${markdownStartTag(escapeRegExp$1(escapeHTML(id)))}[\\S\\s]*?${markdownEndTag(escapeRegExp$1(escapeHTML(id)))}`, "gm");
 const removeMarkdownsThatShouldBeUpdated = ({ oldBeacon, contentIdsToUpdate, newMarkdowns }) => {
 	let newBeacon = oldBeacon;
 	const markdownIdsToRemove = diff(contentIdsToUpdate, newMarkdowns.map(({ id }) => id));
@@ -68,7 +69,7 @@ const tableTypesKeys = Object.keys(tableTypes);
 const tableStartTag = (sectionType) => `<!--${sectionType}-section-->`;
 const tableEndTag = (sectionType) => `<!--${sectionType}-section-end-->`;
 const emptyTablesTemplate = tableTypesKeys.map((tableType) => `${tableStartTag(tableType)}${tableEndTag(tableType)}`).join("");
-const tableRowTemplate = ({ message: { message, id, icon }, tableType }) => `<tr${id === void 0 ? "" : ` data-id="${id}"`}><td>${icon ?? tableTypes[tableType].icon}</td><td>${message}</td></tr>`;
+const tableRowTemplate = ({ message: { message, id, icon }, tableType }) => `<tr${id === void 0 ? "" : ` data-id="${escapeHTML(id)}"`}><td>${icon ?? tableTypes[tableType].icon}</td><td>${message}</td></tr>`;
 const createTable = ({ messages, type }) => {
 	const headerRow = `<tr><th></th><th>${tableTypes[type].title}</th></tr>`;
 	const messageRows = messages.map((message) => tableRowTemplate({
@@ -85,9 +86,10 @@ const appendRowToTable = ({ comment, tableType, message }) => {
 		tableType
 	})}</table>${tableEndTag(tableType)}`);
 };
+const escapeRegExp = (value) => value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 const regexps = {
 	table: (tableType) => new RegExp(`${tableStartTag(tableType)}[\\s\\S]*?${tableEndTag(tableType)}`, "gm"),
-	tableRowWithId: (id) => new RegExp(`<tr data-id="${id}">[\\S\\s]*?</tr>`, "gm"),
+	tableRowWithId: (id) => new RegExp(`<tr data-id="${escapeRegExp(escapeHTML(id))}">[\\S\\s]*?</tr>`, "gm"),
 	tableWithContent: (tableType) => new RegExp(`${tableStartTag(tableType)}[\\s\\S]*?<td>[\\s\\S]*?${tableEndTag(tableType)}`, "gm")
 };
 /**
@@ -1131,7 +1133,7 @@ const commentPr = async ({ githubToken, markdown, commentId }) => {
 	}, async () => {
 		const existingComment = await findBeaconComment(octokit, prContext, commentFooter);
 		const previousBody = existingComment?.body?.replace(commentFooter, "");
-		const body = typeof markdown === "string" ? `${markdown}\n${commentFooter}` : `${markdown(previousBody)}${commentFooter}`;
+		const body = typeof markdown === "string" ? `${markdown}\n${commentFooter}` : `${markdown(previousBody)}\n${commentFooter}`;
 		if (existingComment === void 0) {
 			await octokit.request("POST /repos/{owner}/{repo}/issues/{issue_number}/comments", {
 				...prContext,
@@ -1201,7 +1203,7 @@ var PrBeacon = class PrBeacon {
 	octokit;
 	constructor({ githubToken } = {}) {
 		const token = githubToken ?? process$1.env.GITHUB_TOKEN;
-		if (token === void 0 || token === "") throw new Error("Github token is not provided. Please provide it as `githubToken` parameter or set it in `GITHUB_TOKEN` environment variable.");
+		if (token === void 0 || token === "") throw new Error("GitHub token is not provided. Please provide it as `githubToken` parameter or set it in `GITHUB_TOKEN` environment variable.");
 		this.githubToken = token;
 		this.octokit = getOctokit({ token: this.githubToken });
 	}
