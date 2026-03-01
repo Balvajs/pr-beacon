@@ -1,6 +1,5 @@
 # PR Beacon
 
-[![CI](https://github.com/Balvajs/pr-beacon/actions/workflows/ci.yml/badge.svg)](https://github.com/Balvajs/pr-beacon/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@balvajs/pr-beacon)](https://www.npmjs.com/package/@balvajs/pr-beacon)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
