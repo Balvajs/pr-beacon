@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { emptyTablesTemplate, updateTables } from './beacon-table.ts';
+
 // Mock @actions/core before importing the module under test
 vi.mock('@actions/core', () => ({
   info: vi.fn(),
@@ -13,8 +15,6 @@ vi.mock('picocolors', () => ({
     yellow: (str: string): string => str,
   },
 }));
-
-import { emptyTablesTemplate, updateTables } from './beacon-table';
 
 beforeEach(vi.clearAllMocks);
 

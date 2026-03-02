@@ -6,11 +6,11 @@ import type { operations } from '@octokit/openapi-types';
 import { marked } from 'marked';
 import { shake } from 'radashi';
 
-import { updateMarkdowns } from './beacon-markdown';
-import type { TableRowMessage, TableType } from './beacon-table';
-import { emptyTablesTemplate, updateTables } from './beacon-table';
-import { commentPr } from './comment-pr';
-import { getOctokit, getPrContext } from './get-octokit';
+import { updateMarkdowns } from './beacon-markdown.ts';
+import { emptyTablesTemplate, updateTables } from './beacon-table.ts';
+import type { TableRowMessage, TableType } from './beacon-table.ts';
+import { commentPr } from './comment-pr.ts';
+import { getOctokit, getPrContext } from './get-octokit.ts';
 
 const prContext = getPrContext();
 

@@ -2,7 +2,7 @@ import { warning } from '@actions/core';
 import type { PaginatingEndpoints } from '@octokit/plugin-paginate-rest';
 import { sleep, retry } from 'radashi';
 
-import { getOctokit, getPrContext } from './get-octokit';
+import { getOctokit, getPrContext } from './get-octokit.ts';
 
 const MAX_RETRIES = 5;
 const RETRY_DELAY_MS = 500;
