@@ -1,4 +1,4 @@
-# PR Beacon
+# PR Beacon 🗼
 
 [![npm](https://img.shields.io/npm/v/@balvajs/pr-beacon)](https://www.npmjs.com/package/@balvajs/pr-beacon)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)

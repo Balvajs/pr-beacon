@@ -150,27 +150,32 @@ jobs:
       - name: Run tests with coverage
         run: bun run test:coverage
 
-      - name: Download baseline coverage from merge base
-        id: download-baseline
-        continue-on-error: true
+      - name: Get merge base
+        id: merge-base
+        run: echo "sha=$(git merge-base HEAD origin/main)" >> "$GITHUB_OUTPUT"
+
+      - name: Get coverage baseline run ID
+        id: baseline-run
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          MERGE_BASE=$(git merge-base HEAD origin/main)
           RUN_ID=$(gh run list \
             --repo "${{ github.repository }}" \
-            --workflow ci.yml \
-            --commit "$MERGE_BASE" \
+            --workflow main.yml \
+            --commit "${{ steps.merge-base.outputs.sha }}" \
             --status success \
             --limit 1 \
             --json databaseId \
             --jq '.[0].databaseId')
-          if [ -n "$RUN_ID" ]; then
-            gh run download "$RUN_ID" \
-              --repo "${{ github.repository }}" \
-              --name coverage-baseline \
-              --dir coverage-baseline
-          fi
+          echo "id=$RUN_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Download baseline coverage for merge base
+        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.baseline-run.outputs.id }}
+          name: coverage-baseline
+          path: ${{ github.workspace }}/coverage-baseline
 
       - name: Report coverage
         if: always()

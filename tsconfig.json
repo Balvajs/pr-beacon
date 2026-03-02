@@ -10,8 +10,6 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
 
-    "composite": true,
-    "declarationMap": true,
     "noEmit": true,
 
     "strict": true,
@@ -22,14 +20,6 @@
 
     "lib": ["es2024"]
   },
-  "exclude": ["dist-sdk", "dist-action"],
-  "include": [],
-  "references": [
-    {
-      "path": "./tsconfig.sdk.json"
-    },
-    {
-      "path": "./tsconfig.action.json"
-    }
-  ]
+  "include": ["src/**/*"],
+  "exclude": ["dist-sdk", "dist-action"]
 }
