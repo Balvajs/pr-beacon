@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/Balvajs/pr-beacon/compare/v1.1.0...v1.1.1) (2026-03-02)
+
+
+### Bug Fixes
+
+* **sdk:** add missing extensions to the file imports ([#13](https://github.com/Balvajs/pr-beacon/issues/13)) ([84d89d8](https://github.com/Balvajs/pr-beacon/commit/84d89d879d947674871c13eb17417d23290d6d5a))
+
 ## [1.1.0](https://github.com/Balvajs/pr-beacon/compare/v1.0.3...v1.1.0) (2026-03-02)
 
 
