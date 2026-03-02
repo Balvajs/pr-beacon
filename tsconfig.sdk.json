@@ -3,7 +3,8 @@
   "compilerOptions": {
     "rootDir": "src/sdk",
     "outDir": "dist-sdk",
-    "noEmit": false
+    "noEmit": false,
+    "declaration": true
   },
   "include": ["src/sdk/**/*"],
   "exclude": ["dist-sdk", "dist-action"]

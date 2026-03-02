@@ -1,6 +1,6 @@
 {
   "name": "@balvajs/pr-beacon",
-  "version": "0.0.0",
+  "version": "1.0.2",
   "description": "DangerJS-inspired GitHub Action tool that posts and updates a single sticky PR comment with CI info and warnings.",
   "repository": {
     "type": "git",
@@ -8,7 +8,7 @@
   },
   "type": "module",
   "exports": {
-    ".": "./dist-sdk/index.mjs",
+    ".": "./dist-sdk/index.js",
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -22,7 +22,7 @@
     "prepare": "husky",
     "test": "vitest",
     "test:coverage": "vitest run --coverage",
-    "type-check": "tsgo --build"
+    "type-check": "tsgo"
   },
   "dependencies": {
     "@actions/core": "3.0.0",
