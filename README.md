@@ -20,7 +20,7 @@ The beacon is structured into two main areas:
   | Warnings | ⚠️ | Non-blocking issues worth attention |
   | Messages | 📖 | Informational notes |
 
-- **Markdowns** — Free-form markdown sections appended below the tables, identified by an ID for targeted updates.
+- **Markdowns** — Free-form markdown sections appended below the tables.
 
 Each job owns its content slice via a **content ID** (defaulting to `workflow/job`). On every run a job replaces only its own slice, leaving other jobs' content untouched. Concurrent writes from parallel jobs are handled with optimistic locking and automatic retries.
 
@@ -132,6 +132,22 @@ jobs:
           warn: Lint warnings detected. # written under ID "{workflow} / {job}"
 ```
 
+### Post a markdown section
+
+```yaml
+- uses: Balvajs/pr-beacon@1248b5b89c25f915cc9e65b8dcc99c2e7be8f973 # v1.0.0
+  with:
+    token: ${{ secrets.GITHUB_TOKEN }}
+    markdown-id: coverage-report
+    markdown: |
+      ## Coverage
+
+      | File | % |
+      |---|---|
+      | index.ts | 94% |
+      | utils.ts | 78% |
+```
+
 ### Targeted update — replace content from a previous job
 
 Use `content-ids-to-update` to remove content written by a specific earlier job before adding new content. This is useful in retry or follow-up jobs.
@@ -161,6 +177,8 @@ Use `content-ids-to-update` to remove content written by a specific earlier job 
 | `message`               | No       | `''`      | A single informational message added to the Messages table. Supports markdown.                                           |
 | `message-icon`          | No       | `''`      | Custom icon for the `message` entry.                                                                                     |
 | `message-id`            | No       | `''`      | Content ID for the `message` entry, used for targeted upsert.                                                            |
+| `markdown`              | No       | `''`      | A single free-form markdown block appended below the tables.                                                             |
+| `markdown-id`           | No       | `''`      | Content ID for the `markdown` entry, used for targeted upsert.                                                           |
 | `content-ids-to-update` | No       | `''`      | Comma-separated list of content IDs to remove before adding new content.                                                 |
 | `fail-on-fail-message`  | No       | `'false'` | When `'true'`, the action step exits with a non-zero code if any fail message is present.                                |
 
@@ -226,7 +244,7 @@ await submitPrBeacon(async (beacon) => {
 | `fail`            | `(message, options?) => void` | Add a row to the **Fails** table.                                        |
 | `warn`            | `(message, options?) => void` | Add a row to the **Warnings** table.                                     |
 | `message`         | `(message, options?) => void` | Add a row to the **Messages** table.                                     |
-| `markdown`        | `(id, message) => void`       | Append a free-form markdown section identified by `id`.                  |
+| `markdown`        | `(message, options?) => void` | Append a free-form markdown section.                                     |
 | `hasFails`        | `() => boolean`               | Returns `true` if any fail was added.                                    |
 | `getPrInfo`       | `() => Promise<PrInfo>`       | Fetch pull request metadata (title, head SHA, base/head branches, etc.). |
 | `getChangedFiles` | `() => Promise<File[]>`       | Fetch the full list of files changed in the PR.                          |
@@ -288,33 +306,6 @@ await submitPrBeacon(
   },
 );
 ```
-
----
-
-## How it works
-
-```
-Job A (test)          Job B (lint)          Job C (e2e)
-     │                     │                     │
-     ▼                     ▼                     ▼
-  beacon.fail()        beacon.warn()         beacon.message()
-     │                     │                     │
-     └──────────────────────────────────────────┘
-                           │
-                    commentPr() ← optimistic lock + retry
-                           │
-                    ┌──────────────────────────────┐
-                    │         PR Comment            │
-                    │  ┌────────────────────────┐  │
-                    │  │ 🚫 Fails               │  │
-                    │  │ ⚠️  Warnings            │  │
-                    │  │ 📖 Messages            │  │
-                    │  └────────────────────────┘  │
-                    │  [free markdown sections]    │
-                    └──────────────────────────────┘
-```
-
-When multiple jobs write concurrently, PR Beacon uses **optimistic locking**: after each write it reads back the comment and verifies its content was not overwritten. If it was, the job retries up to 5 times with a 500 ms delay, re-fetching the latest comment body before each attempt so no update is ever lost.
 
 ---
 

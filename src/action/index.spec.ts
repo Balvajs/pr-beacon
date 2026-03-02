@@ -158,6 +158,41 @@ describe('action – individual inputs', () => {
       expect.objectContaining({ icon: '❌', id: 'my-id' }),
     );
   });
+
+  it('calls prBeacon.markdown() when markdown input is provided', async () => {
+    mockGetInput.mockImplementation((name: string) => {
+      if (name === 'token') {
+        return 'tok';
+      }
+      if (name === 'markdown') {
+        return '## My Section';
+      }
+      if (name === 'markdown-id') {
+        return 'section-id';
+      }
+      return '';
+    });
+
+    await loadAndRunAction();
+
+    expect(capturedBeacon.markdown).toHaveBeenCalledWith('## My Section', { id: 'section-id' });
+  });
+
+  it('calls prBeacon.markdown() with empty string id when markdown-id is not provided', async () => {
+    mockGetInput.mockImplementation((name: string) => {
+      if (name === 'token') {
+        return 'tok';
+      }
+      if (name === 'markdown') {
+        return '## My Section';
+      }
+      return '';
+    });
+
+    await loadAndRunAction();
+
+    expect(capturedBeacon.markdown).toHaveBeenCalledWith('## My Section', { id: undefined });
+  });
 });
 
 describe('action – json-file input', () => {
@@ -205,7 +240,7 @@ describe('action – json-file input', () => {
       'JSON msg',
       expect.objectContaining({ markdownToHtml: true }),
     );
-    expect(capturedBeacon.markdown).toHaveBeenCalledWith('md1', '## Section');
+    expect(capturedBeacon.markdown).toHaveBeenCalledWith('## Section', { id: 'md1' });
   });
 
   it('skips empty rows from the JSON payload', async () => {

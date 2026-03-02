@@ -24791,7 +24791,7 @@ var PrBeacon = class PrBeacon {
 		this.tables.fails.push({
 			id: getDefaultContentId(),
 			message: markdownToHtml === true ? convertMarkdownToHtml(message) : message,
-			...shake(meta)
+			...shake(meta, (value) => value === void 0 || value === "")
 		});
 	}
 	/**
@@ -24801,7 +24801,7 @@ var PrBeacon = class PrBeacon {
 		this.tables.warnings.push({
 			id: getDefaultContentId(),
 			message: markdownToHtml === true ? convertMarkdownToHtml(message) : message,
-			...shake(meta)
+			...shake(meta, (value) => value === void 0 || value === "")
 		});
 	}
 	/**
@@ -24811,16 +24811,17 @@ var PrBeacon = class PrBeacon {
 		this.tables.messages.push({
 			id: getDefaultContentId(),
 			message: markdownToHtml === true ? convertMarkdownToHtml(message) : message,
-			...shake(meta)
+			...shake(meta, (value) => value === void 0 || value === "")
 		});
 	}
 	/**
 	* Append markdown to the free format section under all tables in the PR beacon
 	*/
-	markdown(id, message) {
+	markdown(message, meta = {}) {
 		this.markdowns.push({
-			id,
-			message
+			id: getDefaultContentId(),
+			message,
+			...shake(meta, (value) => value === void 0 || value === "")
 		});
 	}
 	static _updateFooter = ({ oldBeacon }) => {
@@ -24894,10 +24895,10 @@ const tableRowSchema = union([string(), object({
 	id: string().optional(),
 	message: string()
 })]);
-const markdownEntrySchema = object({
-	id: string(),
+const markdownEntrySchema = union([string(), object({
+	id: string().optional(),
 	message: string()
-});
+})]);
 /** Full JSON payload accepted by the `json-file` input. */
 const jsonPayloadSchema = object({
 	fails: array(tableRowSchema).optional(),
@@ -24929,11 +24930,16 @@ const applyJsonPayload = (prBeacon, jsonPayload) => {
 	for (const row of jsonPayload.fails ?? []) if (!isEmptyRow(row)) prBeacon.fail(...unpackRow(row));
 	for (const row of jsonPayload.warnings ?? []) if (!isEmptyRow(row)) prBeacon.warn(...unpackRow(row));
 	for (const row of jsonPayload.messages ?? []) if (!isEmptyRow(row)) prBeacon.message(...unpackRow(row));
-	for (const { id, message } of jsonPayload.markdowns ?? []) if (message.trim().length > 0) prBeacon.markdown(id, message);
+	for (const entry of jsonPayload.markdowns ?? []) if (typeof entry === "string") {
+		if (entry.trim().length > 0) prBeacon.markdown(entry);
+	} else {
+		const { id, message } = entry;
+		if (message.trim().length > 0) prBeacon.markdown(message, { id });
+	}
 };
 /** Apply plain-string rows coming from individual action inputs. */
 const applyIndividualInputs = (prBeacon, inputs) => {
-	const { failInput, failIcon, failId, warnInput, warnIcon, warnId, messageInput, messageIcon, messageId } = inputs;
+	const { failInput, failIcon, failId, markdownInput, markdownId, warnInput, warnIcon, warnId, messageInput, messageIcon, messageId } = inputs;
 	if (failInput !== void 0) prBeacon.fail(failInput, {
 		icon: failIcon,
 		id: failId,
@@ -24949,6 +24955,7 @@ const applyIndividualInputs = (prBeacon, inputs) => {
 		id: messageId,
 		markdownToHtml: true
 	});
+	if (markdownInput !== void 0) prBeacon.markdown(markdownInput, { id: markdownId });
 };
 try {
 	process$1.env.GITHUB_TOKEN = getInput("token", { required: true });
@@ -24967,6 +24974,8 @@ try {
 	const messageInput = optionalInput("message");
 	const messageIcon = optionalInput("message-icon");
 	const messageId = optionalInput("message-id");
+	const markdownInput = optionalInput("markdown");
+	const markdownId = optionalInput("markdown-id");
 	const contentIdsToUpdateRaw = optionalInput("content-ids-to-update");
 	const shouldFailOnFailMessage = optionalInput("fail-on-fail-message") === "true";
 	const contentIdsToUpdate = contentIdsToUpdateRaw === void 0 || contentIdsToUpdateRaw === "" ? void 0 : contentIdsToUpdateRaw.split(",").map((entry) => entry.trim()).filter(Boolean);
@@ -24977,6 +24986,8 @@ try {
 			failIcon,
 			failId,
 			failInput,
+			markdownId,
+			markdownInput,
 			messageIcon,
 			messageId,
 			messageInput,

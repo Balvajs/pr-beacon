@@ -70,6 +70,16 @@ inputs:
     required: false
     default: ''
 
+  markdown:
+    description: A single markdown block to add to the comment.
+    required: false
+    default: ''
+
+  markdown-id:
+    description: ID for the markdown entry, used for upsert. Only used when `markdown` is set.
+    required: false
+    default: ''
+
   # ── Submit options ─────────────────────────────────────────────────────────
 
   content-ids-to-update:

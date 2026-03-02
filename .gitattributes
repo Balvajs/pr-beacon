@@ -1,0 +1,2 @@
+# Generated files shouldn't be included in language stats
+dist-action/**     linguist-generated=true
