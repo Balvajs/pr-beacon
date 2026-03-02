@@ -89,7 +89,7 @@ const createTable = (
     total.baseline === undefined ? 'Unknown' : calculateAvgCoverage(total.baseline);
   const totalAvgDiff = getDiff(totalAvgBase, totalAvgCurrent, { withEmoji: true });
   const totalCols = formatMetricCols(total.coverage, total.baseline);
-  const totalRow = `| **Total** ${normalizePct(totalAvgCurrent)}% ${totalAvgDiff} | ${totalCols.join(' | ')} |`;
+  const totalRow = `| **Total ${normalizePct(totalAvgCurrent)}%** ${totalAvgDiff} | ${totalCols.join(' | ')} |`;
 
   const fileRows = rows.map(({ file, coverage, baseline }) => {
     const avgCurrent = calculateAvgCoverage(coverage);
