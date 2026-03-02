@@ -14,7 +14,7 @@
   "scripts": {
     "build": "bun run build:action && bun run build:sdk",
     "build:action": "tsdown",
-    "build:sdk": "tsgo --project tsconfig.sdk.json",
+    "build:sdk": "rm -rf dist-sdk && tsgo --project tsconfig.sdk.json",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "lint": "oxlint --type-aware",
