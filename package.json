@@ -1,6 +1,6 @@
 {
   "name": "@balvajs/pr-beacon",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "DangerJS-inspired GitHub Action tool that posts and updates a single sticky PR comment with CI info and warnings.",
   "repository": {
     "type": "git",
