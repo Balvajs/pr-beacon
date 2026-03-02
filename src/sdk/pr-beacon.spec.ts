@@ -1,4 +1,8 @@
+import { setFailed } from '@actions/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { commentPr } from './comment-pr.ts';
+import { PrBeacon } from './pr-beacon.ts';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -18,7 +22,7 @@ vi.mock('picocolors', () => ({
 }));
 
 const { mockCommentPr } = vi.hoisted(() => ({ mockCommentPr: vi.fn() }));
-vi.mock('./comment-pr', () => ({
+vi.mock('./comment-pr.ts', () => ({
   commentPr: mockCommentPr,
 }));
 
@@ -31,7 +35,7 @@ vi.mock('@actions/github', () => ({
   },
 }));
 
-vi.mock('./get-octokit', () => ({
+vi.mock('./get-octokit.ts', () => ({
   getOctokit: vi.fn(() => ({
     paginate: vi.fn().mockResolvedValue([]),
     request: vi.fn().mockResolvedValue({ data: {} }),
@@ -43,11 +47,6 @@ vi.mock('./get-octokit', () => ({
     repo: 'repo',
   })),
 }));
-
-import { setFailed } from '@actions/core';
-
-import { commentPr } from './comment-pr';
-import { PrBeacon } from './pr-beacon';
 
 const getRenderedBody = (): string => {
   const firstCall = vi.mocked(commentPr).mock.calls.at(0);

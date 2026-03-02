@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { submitPrBeacon } from './index.ts';
+import { PrBeacon } from './pr-beacon.ts';
+
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
@@ -28,8 +31,8 @@ vi.mock('@actions/github', () => ({
 
 const { mockSubmit } = vi.hoisted(() => ({ mockSubmit: vi.fn() }));
 
-vi.mock('./pr-beacon', () => {
-  const PrBeacon = vi.fn(function PrBeacon(this: Record<string, unknown>) {
+vi.mock('./pr-beacon.ts', () => {
+  const PrBeaconMock = vi.fn(function PrBeaconFn(this: Record<string, unknown>) {
     this.fail = vi.fn();
     this.warn = vi.fn();
     this.message = vi.fn();
@@ -37,11 +40,8 @@ vi.mock('./pr-beacon', () => {
     this.hasFails = vi.fn().mockReturnValue(false);
     this._submit = mockSubmit;
   });
-  return { PrBeacon };
+  return { PrBeacon: PrBeaconMock };
 });
-
-import { submitPrBeacon } from './index';
-import { PrBeacon } from './pr-beacon';
 
 beforeEach(() => {
   vi.clearAllMocks();

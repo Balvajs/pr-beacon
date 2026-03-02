@@ -1,6 +1,8 @@
 import type * as Radashi from 'radashi';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { commentPr } from './comment-pr.ts';
+
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
@@ -8,7 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mockRequest = vi.fn();
 const mockPaginateIterator = vi.fn();
 
-vi.mock('./get-octokit', () => ({
+vi.mock('./get-octokit.ts', () => ({
   getOctokit: vi.fn(() => ({
     paginate: {
       iterator: mockPaginateIterator,
@@ -32,8 +34,6 @@ vi.mock('radashi', async (importOriginal) => {
     sleep: vi.fn(),
   };
 });
-
-import { commentPr } from './comment-pr';
 
 // ---------------------------------------------------------------------------
 // Helpers

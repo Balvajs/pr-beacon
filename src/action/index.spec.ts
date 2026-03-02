@@ -8,7 +8,7 @@ vi.mock('@actions/core', () => ({
 }));
 
 const mockSubmitPrBeacon = vi.fn();
-vi.mock('../sdk/index', () => ({
+vi.mock('../sdk/index.ts', () => ({
   submitPrBeacon: mockSubmitPrBeacon,
 }));
 

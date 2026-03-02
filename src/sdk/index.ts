@@ -1,5 +1,5 @@
-import type { commentPr } from './comment-pr';
-import { PrBeacon } from './pr-beacon';
+import type { commentPr } from './comment-pr.ts';
+import { PrBeacon } from './pr-beacon.ts';
 
 /**
  * Runs the provided callback and automatically submits the beacon at the end.

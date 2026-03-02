@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { updateMarkdowns } from './beacon-markdown';
+import { updateMarkdowns } from './beacon-markdown.ts';
 
 const emptyBeacon = '';
 

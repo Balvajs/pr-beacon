@@ -4,7 +4,7 @@ import process from 'node:process';
 import { getInput, setFailed } from '@actions/core';
 import { z } from 'zod';
 
-import { submitPrBeacon } from '../sdk/index';
+import { submitPrBeacon } from '../sdk/index.ts';
 
 // ---------------------------------------------------------------------------
 // Zod schemas
