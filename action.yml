@@ -17,7 +17,7 @@ inputs:
           "fails":    [ string | { message, icon?, id? } ],
           "warnings": [ string | { message, icon?, id? } ],
           "messages": [ string | { message, icon?, id? } ],
-          "markdowns": [ { id, message } ],
+          "markdowns": [ string | { message, id? } ],
           "options": { "contentIdsToUpdate"?: string[] }
         }
     required: false

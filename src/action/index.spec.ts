@@ -178,7 +178,7 @@ describe('action – individual inputs', () => {
     expect(capturedBeacon.markdown).toHaveBeenCalledWith('## My Section', { id: 'section-id' });
   });
 
-  it('calls prBeacon.markdown() with empty string id when markdown-id is not provided', async () => {
+  it('calls prBeacon.markdown() when markdown-id is not provided', async () => {
     mockGetInput.mockImplementation((name: string) => {
       if (name === 'token') {
         return 'tok';
@@ -241,6 +241,28 @@ describe('action – json-file input', () => {
       expect.objectContaining({ markdownToHtml: true }),
     );
     expect(capturedBeacon.markdown).toHaveBeenCalledWith('## Section', { id: 'md1' });
+  });
+
+  it('accepts plain-string markdown entries', async () => {
+    const jsonPayload = {
+      markdowns: ['## Section'],
+    };
+    mockReadFileSync.mockReturnValue(JSON.stringify(jsonPayload));
+
+    await loadAndRunAction();
+
+    expect(capturedBeacon.markdown).toHaveBeenCalledWith('## Section');
+  });
+
+  it('skips whitespace-only plain-string markdown entries', async () => {
+    const jsonPayload = {
+      markdowns: ['   '],
+    };
+    mockReadFileSync.mockReturnValue(JSON.stringify(jsonPayload));
+
+    await loadAndRunAction();
+
+    expect(capturedBeacon.markdown).not.toHaveBeenCalled();
   });
 
   it('skips empty rows from the JSON payload', async () => {

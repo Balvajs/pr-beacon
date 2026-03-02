@@ -189,7 +189,7 @@ Use `content-ids-to-update` to remove content written by a specific earlier job 
   "fails":    [ "string" | { "message": "string", "icon?": "string", "id?": "string" } ],
   "warnings": [ "string" | { "message": "string", "icon?": "string", "id?": "string" } ],
   "messages": [ "string" | { "message": "string", "icon?": "string", "id?": "string" } ],
-  "markdowns": [ { "id": "string", "message": "string" } ],
+  "markdowns": [ "string" | { "message": "string", "id?": "string" } ],
   "options": {
     "contentIdsToUpdate?": [ "string" ]
   }
