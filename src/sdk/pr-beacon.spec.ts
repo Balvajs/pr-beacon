@@ -149,7 +149,7 @@ describe('PrBeacon accumulation', () => {
 
   it('markdown() appends markdown section', async () => {
     const beacon = new PrBeacon({ githubToken: defaultToken });
-    beacon.markdown('my-section', '## Heading\ncontent');
+    beacon.markdown('## Heading\ncontent', { id: 'my-section' });
 
     await beacon._submit({ contentIdsToUpdate: ['my-workflow/my-job'] });
 

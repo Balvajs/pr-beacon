@@ -121,7 +121,7 @@ export class PrBeacon {
     this.tables.fails.push({
       id: getDefaultContentId(),
       message: markdownToHtml === true ? convertMarkdownToHtml(message) : message,
-      ...shake(meta),
+      ...shake(meta, (value) => value === undefined || value === ''),
     });
   }
 
@@ -141,7 +141,7 @@ export class PrBeacon {
     this.tables.warnings.push({
       id: getDefaultContentId(),
       message: markdownToHtml === true ? convertMarkdownToHtml(message) : message,
-      ...shake(meta),
+      ...shake(meta, (value) => value === undefined || value === ''),
     });
   }
 
@@ -161,15 +161,19 @@ export class PrBeacon {
     this.tables.messages.push({
       id: getDefaultContentId(),
       message: markdownToHtml === true ? convertMarkdownToHtml(message) : message,
-      ...shake(meta),
+      ...shake(meta, (value) => value === undefined || value === ''),
     });
   }
 
   /**
    * Append markdown to the free format section under all tables in the PR beacon
    */
-  markdown(id: string, message: string): void {
-    this.markdowns.push({ id, message });
+  markdown(message: string, meta: { id?: string } = {}): void {
+    this.markdowns.push({
+      id: getDefaultContentId(),
+      message,
+      ...shake(meta, (value) => value === undefined || value === ''),
+    });
   }
 
   private static readonly _updateFooter = ({ oldBeacon }: { oldBeacon: string }): string => {

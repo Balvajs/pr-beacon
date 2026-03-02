@@ -19,10 +19,13 @@ const tableRowSchema = z.union([
   }),
 ]);
 
-const markdownEntrySchema = z.object({
-  id: z.string(),
-  message: z.string(),
-});
+const markdownEntrySchema = z.union([
+  z.string(),
+  z.object({
+    id: z.string().optional(),
+    message: z.string(),
+  }),
+]);
 
 /** Full JSON payload accepted by the `json-file` input. */
 const jsonPayloadSchema = z.object({
@@ -88,9 +91,16 @@ const applyJsonPayload = (prBeacon: PrBeaconArg, jsonPayload: JsonPayload): void
       prBeacon.message(...unpackRow(row));
     }
   }
-  for (const { id, message } of jsonPayload.markdowns ?? []) {
-    if (message.trim().length > 0) {
-      prBeacon.markdown(id, message);
+  for (const entry of jsonPayload.markdowns ?? []) {
+    if (typeof entry === 'string') {
+      if (entry.trim().length > 0) {
+        prBeacon.markdown(entry);
+      }
+    } else {
+      const { id, message } = entry;
+      if (message.trim().length > 0) {
+        prBeacon.markdown(message, { id });
+      }
     }
   }
 };
@@ -99,6 +109,8 @@ type IndividualInputs = {
   failInput: string | undefined;
   failIcon: string | undefined;
   failId: string | undefined;
+  markdownInput: string | undefined;
+  markdownId: string | undefined;
   messageInput: string | undefined;
   messageIcon: string | undefined;
   messageId: string | undefined;
@@ -113,6 +125,8 @@ const applyIndividualInputs = (prBeacon: PrBeaconArg, inputs: IndividualInputs):
     failInput,
     failIcon,
     failId,
+    markdownInput,
+    markdownId,
     warnInput,
     warnIcon,
     warnId,
@@ -129,6 +143,9 @@ const applyIndividualInputs = (prBeacon: PrBeaconArg, inputs: IndividualInputs):
   }
   if (messageInput !== undefined) {
     prBeacon.message(messageInput, { icon: messageIcon, id: messageId, markdownToHtml: true });
+  }
+  if (markdownInput !== undefined) {
+    prBeacon.markdown(markdownInput, { id: markdownId });
   }
 };
 
@@ -160,6 +177,8 @@ try {
   const messageInput = optionalInput('message');
   const messageIcon = optionalInput('message-icon');
   const messageId = optionalInput('message-id');
+  const markdownInput = optionalInput('markdown');
+  const markdownId = optionalInput('markdown-id');
 
   // -- Submit options --------------------------------------------------------
   const contentIdsToUpdateRaw = optionalInput('content-ids-to-update');
@@ -185,6 +204,8 @@ try {
       failIcon,
       failId,
       failInput,
+      markdownId,
+      markdownInput,
       messageIcon,
       messageId,
       messageInput,

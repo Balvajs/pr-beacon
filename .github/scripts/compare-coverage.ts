@@ -163,5 +163,5 @@ await submitPrBeacon(async (beacon) => {
     coverage: prCoverage.total,
   });
 
-  beacon.markdown('coverage-report', `${heading}\n\n${table}`);
+  beacon.markdown(`${heading}\n\n${table}`, { id: 'coverage-report' });
 });

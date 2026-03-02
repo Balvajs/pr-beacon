@@ -17,7 +17,7 @@ inputs:
           "fails":    [ string | { message, icon?, id? } ],
           "warnings": [ string | { message, icon?, id? } ],
           "messages": [ string | { message, icon?, id? } ],
-          "markdowns": [ { id, message } ],
+          "markdowns": [ string | { message, id? } ],
           "options": { "contentIdsToUpdate"?: string[] }
         }
     required: false
@@ -67,6 +67,16 @@ inputs:
 
   message-id:
     description: ID for the message entry, used for upsert. Only used when `message` is set.
+    required: false
+    default: ''
+
+  markdown:
+    description: A single markdown block to add to the comment.
+    required: false
+    default: ''
+
+  markdown-id:
+    description: ID for the markdown entry, used for upsert. Only used when `markdown` is set.
     required: false
     default: ''
 
