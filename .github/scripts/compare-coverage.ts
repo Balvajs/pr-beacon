@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import process from 'node:process';
 
 import { warning } from '@actions/core';
-import { alphabetical } from 'radashi';
+import { alphabetical, round, sum } from 'radashi';
 import { z } from 'zod';
 
 import { submitPrBeacon } from '../../src/sdk/index.ts';
@@ -34,7 +35,8 @@ const metrics = ['statements', 'branches', 'functions', 'lines'] as const;
 // Helpers extracted from report-coverage pattern
 // ---------------------------------------------------------------------------
 
-const PERCENTS_MULTIPLIER = 100;
+const DIFF_THRESHOLD = 0.1;
+const ROUND_PRECISION = 2;
 
 const normalizePct = (pct: number | 'Unknown'): number => (pct === 'Unknown' ? 0 : pct);
 
@@ -43,15 +45,12 @@ const getDiff = (
   current: number | 'Unknown',
   { withEmoji = false }: { withEmoji?: boolean } = {},
 ): string => {
-  const diff =
-    Math.round(
-      (normalizePct(current) - normalizePct(base) + Number.EPSILON) * PERCENTS_MULTIPLIER,
-    ) / PERCENTS_MULTIPLIER;
+  const diff = round(normalizePct(current) - normalizePct(base), ROUND_PRECISION);
 
-  if (diff < 0) {
+  if (diff < -DIFF_THRESHOLD) {
     return `(${diff}%${withEmoji ? ' 🔻' : ''})`;
   }
-  if (diff > 0) {
+  if (diff > DIFF_THRESHOLD) {
     return `(+${diff}%${withEmoji ? ' 🟢' : ''})`;
   }
   return `(±${diff}%)`;
@@ -65,8 +64,8 @@ const calculateAvgCoverage = (fileCoverage: FileCoverage): number | 'Unknown' =>
   if (pcts.length === 0) {
     return 'Unknown';
   }
-  const avg = pcts.reduce((sum, pct) => sum + pct, 0) / pcts.length;
-  return Math.round((avg + Number.EPSILON) * PERCENTS_MULTIPLIER) / PERCENTS_MULTIPLIER;
+  const avg = sum(pcts) / pcts.length;
+  return round(avg + Number.EPSILON, ROUND_PRECISION);
 };
 
 const formatMetricCols = (coverage: FileCoverage, baseline: FileCoverage | undefined): string[] =>
@@ -78,18 +77,24 @@ const formatMetricCols = (coverage: FileCoverage, baseline: FileCoverage | undef
   });
 
 const createTable = (
-  rows: { file: string; coverage: FileCoverage; baseline: FileCoverage | undefined }[],
+  rows: {
+    file: string;
+    coverage: FileCoverage;
+    baseline: FileCoverage | undefined;
+  }[],
   total: { coverage: FileCoverage; baseline: FileCoverage | undefined },
 ): string => {
-  const header = `| File | Stmts | Branch | Funcs | Lines |`;
-  const separator = `| :--- | ---: | ---: | ---: | ---: |`;
+  const header = '| File | Stmts | Branch | Funcs | Lines |';
+  const separator = '| :--- | ---: | ---: | ---: | ---: |';
 
   const totalAvgCurrent = calculateAvgCoverage(total.coverage);
   const totalAvgBase =
     total.baseline === undefined ? 'Unknown' : calculateAvgCoverage(total.baseline);
-  const totalAvgDiff = getDiff(totalAvgBase, totalAvgCurrent, { withEmoji: true });
+  const totalAvgDiff = getDiff(totalAvgBase, totalAvgCurrent, {
+    withEmoji: true,
+  });
   const totalCols = formatMetricCols(total.coverage, total.baseline);
-  const totalRow = `| **Total ${normalizePct(totalAvgCurrent)}%** ${totalAvgDiff} | ${totalCols.join(' | ')} |`;
+  const totalRow = `| **Total** ${totalAvgDiff} | ${totalCols.map((col) => `**${col}**`).join(' | ')} |`;
 
   const fileRows = rows.map(({ file, coverage, baseline }) => {
     const avgCurrent = calculateAvgCoverage(coverage);
@@ -113,12 +118,13 @@ const shortenPath = (filePath: string): string => {
 
 const readCoverage = (path: string): ProjectCoverage | undefined => {
   if (!existsSync(path)) {
-    return undefined;
+    warning(`Coverage file not found at path: ${path}`);
+    return;
   }
   return summaryJsonSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
 };
 
-const prCoverage = readCoverage('coverage/coverage-summary.json');
+const prCoverage = readCoverage(join(import.meta.dirname, '../../coverage/coverage-summary.json'));
 
 if (!prCoverage) {
   warning('No PR coverage data found, skipping coverage report');
@@ -126,7 +132,9 @@ if (!prCoverage) {
   process.exit(0);
 }
 
-const baselineCoverage = readCoverage('coverage-baseline/coverage-summary.json');
+const baselineCoverage = readCoverage(
+  join(import.meta.dirname, '../../coverage-baseline/coverage-summary.json'),
+);
 
 // ---------------------------------------------------------------------------
 // Report
@@ -155,13 +163,13 @@ await submitPrBeacon(async (beacon) => {
 
   const hasBaseline = baselineCoverage !== undefined;
   const heading = hasBaseline
-    ? '## Coverage (vs main baseline)'
-    : '## Coverage *(no baseline available)*';
+    ? '### Coverage (vs main baseline)'
+    : '### Coverage *(no baseline available)*';
 
   const table = createTable(rows, {
     baseline: baselineCoverage?.total,
-    coverage: prCoverage.total,
+    coverage: prCoverage.total!,
   });
 
-  beacon.markdown(`${heading}\n\n${table}`, { id: 'coverage-report' });
+  beacon.markdown(`${heading}\n\n${table}`);
 });

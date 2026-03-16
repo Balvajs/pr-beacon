@@ -22,6 +22,6 @@
 
     "lib": ["es2024"]
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", ".github/scripts/**/*"],
   "exclude": ["dist-sdk", "dist-action"]
 }
