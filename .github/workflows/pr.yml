@@ -82,7 +82,7 @@ jobs:
         uses: ./
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          fail: Build failed. Please check the build logs for details.
+          fail: Build failed. Please check the <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">build logs</a> for details.
 
       - name: Build dist fail message
         id: dist-fail-message
@@ -131,7 +131,7 @@ jobs:
         uses: ./
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          fail: ${{ steps.type-check.outcome == 'failure' && 'Type checking failed. Please check the type-check logs for details.' || '' }}
+          fail: ${{ steps.type-check.outcome == 'failure' && format('Type checking failed. Please check the <a href="{0}/{1}/actions/runs/{2}">type-check logs</a> for details.', github.server_url, github.repository, github.run_id) || '' }}
           message: ${{ steps.type-check.outcome == 'success' && 'Type-check' || '' }}
           message-icon: ✅
 
