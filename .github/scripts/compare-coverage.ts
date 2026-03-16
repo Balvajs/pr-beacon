@@ -163,8 +163,8 @@ await submitPrBeacon(async (beacon) => {
 
   const hasBaseline = baselineCoverage !== undefined;
   const heading = hasBaseline
-    ? '## Coverage (vs main baseline)'
-    : '## Coverage *(no baseline available)*';
+    ? '### Coverage (vs main baseline)'
+    : '### Coverage *(no baseline available)*';
 
   const table = createTable(rows, {
     baseline: baselineCoverage?.total,
