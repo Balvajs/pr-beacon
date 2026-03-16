@@ -5,6 +5,8 @@
 
 > A [Danger.js](https://danger.systems/js/)-inspired GitHub Action that maintains a single sticky PR comment consolidating CI failures, warnings, and messages from across all your workflow jobs.
 
+![Preview of PR Beacon comment on a pull request](docs/beacon-preview.png)
+
 ---
 
 ## Overview

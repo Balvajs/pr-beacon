@@ -56,7 +56,7 @@ const getDiff = (
   return `(±${diff}%)`;
 };
 
-const calculateAvgCoverage = (fileCoverage: FileCoverage): number | 'Unknowns' => {
+const calculateAvgCoverage = (fileCoverage: FileCoverage): number | 'Unknown' => {
   const pcts = Object.values(fileCoverage)
     .map(({ pct }) => pct)
     .filter((pct): pct is number => typeof pct === 'number');
@@ -168,7 +168,7 @@ await submitPrBeacon(async (beacon) => {
 
   const table = createTable(rows, {
     baseline: baselineCoverage?.total,
-    coverage: prCoverage.total,
+    coverage: prCoverage.total!,
   });
 
   beacon.markdown(`${heading}\n\n${table}`);

@@ -26,7 +26,7 @@ describe('emptyTablesTemplate', () => {
   });
 });
 
-describe.skip('updateTables – create path', () => {
+describe('updateTables – create path', () => {
   it('inserts a fails table when there are fail messages', () => {
     const result = updateTables({
       contentIdsToUpdate: ['ci/test'],
@@ -132,7 +132,7 @@ describe.skip('updateTables – create path', () => {
   });
 });
 
-describe.skip('updateTables – append path', () => {
+describe('updateTables – append path', () => {
   it('appends a new row to an existing table', () => {
     // First pass – create the table
     const firstpass = updateTables({
@@ -162,7 +162,7 @@ describe.skip('updateTables – append path', () => {
 });
 
 describe('updateTables – contentIdsToUpdate removal', () => {
-  it.skip('removes existing rows matching contentIdsToUpdate before inserting new ones', () => {
+  it('removes existing rows matching contentIdsToUpdate before inserting new ones', () => {
     const firstPass = updateTables({
       contentIdsToUpdate: ['ci/job'],
       newTables: {
@@ -187,7 +187,7 @@ describe('updateTables – contentIdsToUpdate removal', () => {
     expect(secondPass).toContain('new message');
   });
 
-  it.skip('removes the table entirely when all rows for the id are cleared', () => {
+  it('removes the table entirely when all rows for the id are cleared', () => {
     const withTable = updateTables({
       contentIdsToUpdate: ['ci/job'],
       newTables: {
