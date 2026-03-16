@@ -352,6 +352,89 @@ describe('updateTables – in-place replaceMode (default)', () => {
     expect(result.indexOf('Row A first')).toBeLessThan(result.indexOf('Row A second'));
     expect(result.indexOf('Row A second')).toBeLessThan(result.indexOf('Row B'));
   });
+
+  it('handles the same ID across different table types without cross-table collision', () => {
+    // Job writes both a warning and a message with the same ID
+    const initial = updateTables({
+      contentIdsToUpdate: ['ci/job'],
+      newTables: {
+        fails: [],
+        messages: [{ id: 'ci/job', message: 'Msg original' }],
+        warnings: [{ id: 'ci/job', message: 'Warn original' }],
+      },
+      oldBeacon: emptyTablesTemplate,
+    });
+
+    expect(initial).toContain('Msg original');
+    expect(initial).toContain('Warn original');
+
+    // Re-run: update both table types with the same ID
+    const result = updateTables({
+      contentIdsToUpdate: ['ci/job'],
+      newTables: {
+        fails: [],
+        messages: [{ id: 'ci/job', message: 'Msg updated' }],
+        warnings: [{ id: 'ci/job', message: 'Warn updated' }],
+      },
+      oldBeacon: initial,
+    });
+
+    expect(result).toContain('Msg updated');
+    expect(result).toContain('Warn updated');
+    expect(result).not.toContain('Msg original');
+    expect(result).not.toContain('Warn original');
+
+    // Verify rows are in their correct table sections
+    const warningsSection = result.match(
+      /<!--warnings-section-->[\s\S]*?<!--warnings-section-end-->/,
+    )?.[0];
+    const messagesSection = result.match(
+      /<!--messages-section-->[\s\S]*?<!--messages-section-end-->/,
+    )?.[0];
+
+    expect(warningsSection).toContain('Warn updated');
+    expect(warningsSection).not.toContain('Msg updated');
+    expect(messagesSection).toContain('Msg updated');
+    expect(messagesSection).not.toContain('Warn updated');
+  });
+
+  it('handles an ID that moves between table types on re-run', () => {
+    // First run: ci/job produces a message
+    const initial = updateTables({
+      contentIdsToUpdate: ['ci/job'],
+      newTables: {
+        fails: [],
+        messages: [{ id: 'ci/job', message: 'All good' }],
+        warnings: [],
+      },
+      oldBeacon: emptyTablesTemplate,
+    });
+
+    // Re-run: ci/job now produces a warning instead of a message
+    const result = updateTables({
+      contentIdsToUpdate: ['ci/job'],
+      newTables: {
+        fails: [],
+        messages: [],
+        warnings: [{ id: 'ci/job', message: 'Something suspicious' }],
+      },
+      oldBeacon: initial,
+    });
+
+    expect(result).toContain('Something suspicious');
+    expect(result).not.toContain('All good');
+
+    // Warning row must be in warnings section, not messages
+    const warningsSection = result.match(
+      /<!--warnings-section-->[\s\S]*?<!--warnings-section-end-->/,
+    )?.[0];
+    const messagesSection = result.match(
+      /<!--messages-section-->[\s\S]*?<!--messages-section-end-->/,
+    )?.[0];
+
+    expect(warningsSection).toContain('Something suspicious');
+    expect(messagesSection).not.toContain('Something suspicious');
+  });
 });
 
 describe('updateTables – append replaceMode', () => {

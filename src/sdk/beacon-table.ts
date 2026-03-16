@@ -110,7 +110,8 @@ const regexps = {
     ),
 };
 
-const rowPlaceholder = (id: string): string => `<!--row-placeholder-${escapeHTML(id)}-->`;
+const rowPlaceholder = (tableType: TableType, id: string): string =>
+  `<!--row-placeholder-${tableType}-${escapeHTML(id)}-->`;
 
 /** Collect all IDs that need processing from contentIdsToUpdate and new table rows. */
 const collectAllIds = ({
@@ -186,6 +187,9 @@ const removeTableRowsThatShouldUpdate = ({
 /**
  * Replace table rows in-place: new rows take the position of the first matching old row,
  * preserving ordering. Remaining old rows with the same ID are removed.
+ *
+ * Placeholders are scoped by `(tableType, id)` so the same ID in different
+ * table sections cannot collide.
  */
 const replaceTableRowsInPlace = ({
   oldBeacon,
@@ -200,11 +204,20 @@ const replaceTableRowsInPlace = ({
 
   const allIdsToProcess = collectAllIds({ contentIdsToUpdate, newTables });
 
-  // Step 1: For each ID, replace FIRST occurrence with a placeholder, remove the rest
-  for (const id of allIdsToProcess) {
-    newBeacon = newBeacon.replace(regexps.tableRowWithIdFirst(id), rowPlaceholder(id));
-    // Remove any remaining rows with this ID
-    newBeacon = newBeacon.replaceAll(regexps.tableRowWithId(id), '');
+  // Step 1: For each table section and ID, replace the FIRST row within that
+  // Section with a scoped placeholder and remove the rest. Operating per-section
+  // Avoids cross-table collisions when the same ID appears in multiple tables.
+  for (const tableType of tableTypesKeys) {
+    const sectionRegex = regexps.table(tableType);
+    newBeacon = newBeacon.replace(sectionRegex, (section) => {
+      let updatedSection = section;
+      for (const id of allIdsToProcess) {
+        const placeholder = rowPlaceholder(tableType, id);
+        updatedSection = updatedSection.replace(regexps.tableRowWithIdFirst(id), placeholder);
+        updatedSection = updatedSection.replaceAll(regexps.tableRowWithId(id), '');
+      }
+      return updatedSection;
+    });
   }
 
   // Step 2: For each table type, group new rows by ID and replace placeholders
@@ -232,7 +245,7 @@ const replaceTableRowsInPlace = ({
     const appendQueue: TableRowMessage[] = [...rowsWithoutId];
 
     for (const [id, messages] of rowsById) {
-      const placeholder = rowPlaceholder(id);
+      const placeholder = rowPlaceholder(tableType, id);
       if (newBeacon.includes(placeholder)) {
         const rowsHtml = messages
           .map((message) => tableRowTemplate({ message, tableType }))
@@ -258,8 +271,10 @@ const replaceTableRowsInPlace = ({
   }
 
   // Step 3: Clean up leftover placeholders (IDs that were only removed, not replaced)
-  for (const id of allIdsToProcess) {
-    newBeacon = newBeacon.replaceAll(rowPlaceholder(id), '');
+  for (const tableType of tableTypesKeys) {
+    for (const id of allIdsToProcess) {
+      newBeacon = newBeacon.replaceAll(rowPlaceholder(tableType, id), '');
+    }
   }
 
   // Handle empty table sections: if a table section has no content, recreate it empty

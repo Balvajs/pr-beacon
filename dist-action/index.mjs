@@ -19845,7 +19845,7 @@ var Context = class {
 };
 
 //#endregion
-//#region node_modules/.pnpm/@actions+http-client@3.0.2/node_modules/@actions/http-client/lib/proxy.js
+//#region node_modules/.pnpm/@actions+github@9.0.0/node_modules/@actions/github/node_modules/@actions/http-client/lib/proxy.js
 var require_proxy = /* @__PURE__ */ __commonJSMin(((exports) => {
 	Object.defineProperty(exports, "__esModule", { value: true });
 	exports.getProxyUrl = getProxyUrl;
@@ -19899,7 +19899,7 @@ var require_proxy = /* @__PURE__ */ __commonJSMin(((exports) => {
 }));
 
 //#endregion
-//#region node_modules/.pnpm/@actions+http-client@3.0.2/node_modules/@actions/http-client/lib/index.js
+//#region node_modules/.pnpm/@actions+github@9.0.0/node_modules/@actions/github/node_modules/@actions/http-client/lib/index.js
 var require_lib = /* @__PURE__ */ __commonJSMin(((exports) => {
 	var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k, k2) {
 		if (k2 === void 0) k2 = k;
@@ -24704,7 +24704,7 @@ const regexps = {
 	tableRowWithIdFirst: (id) => new RegExp(tableRowWithIdPattern(id), "m"),
 	tableWithContent: (tableType) => new RegExp(`${tableStartTag(tableType)}[\\s\\S]*?<td>[\\s\\S]*?${tableEndTag(tableType)}`, "gm")
 };
-const rowPlaceholder = (id) => `<!--row-placeholder-${escapeHTML(id)}-->`;
+const rowPlaceholder = (tableType, id) => `<!--row-placeholder-${tableType}-${escapeHTML(id)}-->`;
 /** Collect all IDs that need processing from contentIdsToUpdate and new table rows. */
 const collectAllIds = ({ contentIdsToUpdate, newTables }) => {
 	const tableContentIds = unique(tableTypesKeys.flatMap((tableType) => newTables[tableType].map(({ id }) => id).filter((id) => id !== void 0)));
@@ -24743,6 +24743,9 @@ const removeTableRowsThatShouldUpdate = ({ oldBeacon, contentIdsToUpdate, newTab
 /**
 * Replace table rows in-place: new rows take the position of the first matching old row,
 * preserving ordering. Remaining old rows with the same ID are removed.
+*
+* Placeholders are scoped by `(tableType, id)` so the same ID in different
+* table sections cannot collide.
 */
 const replaceTableRowsInPlace = ({ oldBeacon, newTables, contentIdsToUpdate }) => {
 	let newBeacon = oldBeacon;
@@ -24750,9 +24753,17 @@ const replaceTableRowsInPlace = ({ oldBeacon, newTables, contentIdsToUpdate }) =
 		contentIdsToUpdate,
 		newTables
 	});
-	for (const id of allIdsToProcess) {
-		newBeacon = newBeacon.replace(regexps.tableRowWithIdFirst(id), rowPlaceholder(id));
-		newBeacon = newBeacon.replaceAll(regexps.tableRowWithId(id), "");
+	for (const tableType of tableTypesKeys) {
+		const sectionRegex = regexps.table(tableType);
+		newBeacon = newBeacon.replace(sectionRegex, (section) => {
+			let updatedSection = section;
+			for (const id of allIdsToProcess) {
+				const placeholder = rowPlaceholder(tableType, id);
+				updatedSection = updatedSection.replace(regexps.tableRowWithIdFirst(id), placeholder);
+				updatedSection = updatedSection.replaceAll(regexps.tableRowWithId(id), "");
+			}
+			return updatedSection;
+		});
 	}
 	for (const tableType of tableTypesKeys) {
 		const rowsByTableType = newTables[tableType];
@@ -24766,7 +24777,7 @@ const replaceTableRowsInPlace = ({ oldBeacon, newTables, contentIdsToUpdate }) =
 		}
 		const appendQueue = [...rowsWithoutId];
 		for (const [id, messages] of rowsById) {
-			const placeholder = rowPlaceholder(id);
+			const placeholder = rowPlaceholder(tableType, id);
 			if (newBeacon.includes(placeholder)) {
 				const rowsHtml = messages.map((message) => tableRowTemplate({
 					message,
@@ -24782,7 +24793,7 @@ const replaceTableRowsInPlace = ({ oldBeacon, newTables, contentIdsToUpdate }) =
 			tableType
 		});
 	}
-	for (const id of allIdsToProcess) newBeacon = newBeacon.replaceAll(rowPlaceholder(id), "");
+	for (const tableType of tableTypesKeys) for (const id of allIdsToProcess) newBeacon = newBeacon.replaceAll(rowPlaceholder(tableType, id), "");
 	for (const tableType of tableTypesKeys) if (!regexps.tableWithContent(tableType).test(newBeacon)) {
 		const newTable = `${tableStartTag(tableType)}${tableEndTag(tableType)}`;
 		newBeacon = newBeacon.replace(regexps.table(tableType), newTable);
@@ -24813,7 +24824,7 @@ const updateTables = ({ oldBeacon, newTables, contentIdsToUpdate, replaceMode = 
 };
 
 //#endregion
-//#region ../../../node_modules/universal-user-agent/index.js
+//#region node_modules/universal-user-agent/index.js
 function getUserAgent() {
 	if (typeof navigator === "object" && "userAgent" in navigator) return navigator.userAgent;
 	if (typeof process === "object" && process.version !== void 0) return `Node.js/${process.version.substr(1)} (${process.platform}; ${process.arch})`;
@@ -24821,7 +24832,7 @@ function getUserAgent() {
 }
 
 //#endregion
-//#region ../../../node_modules/before-after-hook/lib/register.js
+//#region node_modules/before-after-hook/lib/register.js
 function register(state, name, method, options) {
 	if (typeof method !== "function") throw new Error("method for before hook must be a function");
 	if (!options) options = {};
@@ -24837,7 +24848,7 @@ function register(state, name, method, options) {
 }
 
 //#endregion
-//#region ../../../node_modules/before-after-hook/lib/add.js
+//#region node_modules/before-after-hook/lib/add.js
 function addHook(state, kind, name, hook) {
 	const orig = hook;
 	if (!state.registry[name]) state.registry[name] = [];
@@ -24865,7 +24876,7 @@ function addHook(state, kind, name, hook) {
 }
 
 //#endregion
-//#region ../../../node_modules/before-after-hook/lib/remove.js
+//#region node_modules/before-after-hook/lib/remove.js
 function removeHook(state, name, method) {
 	if (!state.registry[name]) return;
 	const index = state.registry[name].map((registered) => {
@@ -24876,7 +24887,7 @@ function removeHook(state, name, method) {
 }
 
 //#endregion
-//#region ../../../node_modules/before-after-hook/index.js
+//#region node_modules/before-after-hook/index.js
 const bind = Function.bind;
 const bindable = bind.bind(bind);
 function bindApi(hook, state, name) {
@@ -24916,7 +24927,7 @@ var before_after_hook_default = {
 };
 
 //#endregion
-//#region ../../../node_modules/@octokit/endpoint/dist-bundle/index.js
+//#region node_modules/@octokit/endpoint/dist-bundle/index.js
 var userAgent = `octokit-endpoint.js/0.0.0-development ${getUserAgent()}`;
 var DEFAULTS = {
 	method: "GET",
@@ -25138,7 +25149,7 @@ function withDefaults$2(oldDefaults, newDefaults) {
 var endpoint = withDefaults$2(null, DEFAULTS);
 
 //#endregion
-//#region ../../../node_modules/fast-content-type-parse/index.js
+//#region node_modules/fast-content-type-parse/index.js
 var require_fast_content_type_parse = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	const NullObject = function NullObject() {};
 	NullObject.prototype = Object.create(null);
@@ -25251,7 +25262,7 @@ var require_fast_content_type_parse = /* @__PURE__ */ __commonJSMin(((exports, m
 }));
 
 //#endregion
-//#region ../../../node_modules/json-with-bigint/json-with-bigint.js
+//#region node_modules/json-with-bigint/json-with-bigint.js
 var import_fast_content_type_parse = require_fast_content_type_parse();
 const noiseValue = /^-?\d+n+$/;
 const originalStringify = JSON.stringify;
@@ -25307,7 +25318,7 @@ const JSONParse = (text, reviver) => {
 };
 
 //#endregion
-//#region ../../../node_modules/@octokit/request-error/dist-src/index.js
+//#region node_modules/@octokit/request-error/dist-src/index.js
 var RequestError = class extends Error {
 	name;
 	/**
@@ -25337,7 +25348,7 @@ var RequestError = class extends Error {
 };
 
 //#endregion
-//#region ../../../node_modules/@octokit/request/dist-bundle/index.js
+//#region node_modules/@octokit/request/dist-bundle/index.js
 var VERSION$3 = "10.0.8";
 var defaults_default = { headers: { "user-agent": `octokit-request.js/${VERSION$3} ${getUserAgent()}` } };
 function isPlainObject(value) {
@@ -25477,7 +25488,7 @@ var request = withDefaults$1(endpoint, defaults_default);
 /* v8 ignore else -- @preserve */
 
 //#endregion
-//#region ../../../node_modules/@octokit/graphql/dist-bundle/index.js
+//#region node_modules/@octokit/graphql/dist-bundle/index.js
 var VERSION$2 = "0.0.0-development";
 function _buildMessageForResponseErrors(data) {
 	return `Request failed due to following response errors:
@@ -25565,7 +25576,7 @@ function withCustomRequest(customRequest) {
 }
 
 //#endregion
-//#region ../../../node_modules/@octokit/auth-token/dist-bundle/index.js
+//#region node_modules/@octokit/auth-token/dist-bundle/index.js
 var b64url = "(?:[a-zA-Z0-9_-]+)";
 var sep = "\\.";
 var jwtRE = new RegExp(`^${b64url}${sep}${b64url}${sep}${b64url}$`);
@@ -25597,11 +25608,11 @@ var createTokenAuth = function createTokenAuth2(token) {
 };
 
 //#endregion
-//#region ../../../node_modules/@octokit/core/dist-src/version.js
+//#region node_modules/@octokit/core/dist-src/version.js
 const VERSION$1 = "7.0.6";
 
 //#endregion
-//#region ../../../node_modules/@octokit/core/dist-src/index.js
+//#region node_modules/@octokit/core/dist-src/index.js
 const noop = () => {};
 const consoleWarn = console.warn.bind(console);
 const consoleError = console.error.bind(console);
@@ -25689,7 +25700,7 @@ var Octokit = class {
 };
 
 //#endregion
-//#region ../../../node_modules/@octokit/plugin-paginate-rest/dist-bundle/index.js
+//#region node_modules/@octokit/plugin-paginate-rest/dist-bundle/index.js
 var VERSION = "0.0.0-development";
 function normalizePaginatedListResponse(response) {
 	if (!response.data) return {
