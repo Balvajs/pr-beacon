@@ -8,7 +8,7 @@ import { shake } from 'radashi';
 
 import { updateMarkdowns } from './beacon-markdown.ts';
 import { emptyTablesTemplate, updateTables } from './beacon-table.ts';
-import type { TableRowMessage, TableType } from './beacon-table.ts';
+import type { ReplaceMode, TableRowMessage, TableType } from './beacon-table.ts';
 import { commentPr } from './comment-pr.ts';
 import { getOctokit, getPrContext } from './get-octokit.ts';
 
@@ -215,9 +215,16 @@ export class PrBeacon {
        * If true, the CI step will fail when there is at least one message in `Fails` table.
        */
       shouldFailOnFailMessage?: boolean;
+      /**
+       * Controls how updated table rows are positioned relative to existing rows.
+       *
+       * - `'in-place'` (default): New rows replace at the position of the first old row with the same ID, preserving ordering.
+       * - `'append'`: Old rows are removed and new rows are appended at the end of the table.
+       */
+      replaceMode?: ReplaceMode;
     } = {},
   ): Promise<ReturnType<typeof commentPr>> {
-    const { contentIdsToUpdate = [getDefaultContentId()] } = options;
+    const { contentIdsToUpdate = [getDefaultContentId()], replaceMode } = options;
 
     const updateReport = (oldBeacon: string | undefined): string => {
       let newBeacon = oldBeacon ?? emptyTablesTemplate;
@@ -226,6 +233,7 @@ export class PrBeacon {
         contentIdsToUpdate,
         newTables: this.tables,
         oldBeacon: newBeacon,
+        replaceMode,
       });
 
       newBeacon = updateMarkdowns({

@@ -35,6 +35,7 @@ const jsonPayloadSchema = z.object({
   options: z
     .object({
       contentIdsToUpdate: z.array(z.string()).optional(),
+      replaceMode: z.enum(['in-place', 'append']).optional(),
     })
     .optional(),
   warnings: z.array(tableRowSchema).optional(),
@@ -183,6 +184,9 @@ try {
   // -- Submit options --------------------------------------------------------
   const contentIdsToUpdateRaw = optionalInput('content-ids-to-update');
   const shouldFailOnFailMessage = optionalInput('fail-on-fail-message') === 'true';
+  const replaceModeRaw = optionalInput('replace-mode');
+  const replaceMode =
+    replaceModeRaw === 'in-place' || replaceModeRaw === 'append' ? replaceModeRaw : undefined;
 
   const contentIdsToUpdate =
     contentIdsToUpdateRaw === undefined || contentIdsToUpdateRaw === ''
@@ -194,6 +198,7 @@ try {
 
   // -- Merge submit options (JSON payload options take precedence) -----------
   const resolvedContentIdsToUpdate = jsonPayload?.options?.contentIdsToUpdate ?? contentIdsToUpdate;
+  const resolvedReplaceMode = jsonPayload?.options?.replaceMode ?? replaceMode;
 
   // -- Build and submit the beacon -------------------------------------------
   const buildBeaconCallback: Parameters<typeof submitPrBeacon>[0] = (prBeacon) => {
@@ -217,6 +222,7 @@ try {
 
   await submitPrBeacon(buildBeaconCallback, {
     contentIdsToUpdate: resolvedContentIdsToUpdate,
+    replaceMode: resolvedReplaceMode,
     shouldFailOnFailMessage,
   });
 } catch (error) {
