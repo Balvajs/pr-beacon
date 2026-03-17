@@ -24788,7 +24788,7 @@ const commentPr = async ({ githubToken, markdown, commentId }) => {
 				commentBody: body
 			};
 		}
-		await octokit.request("PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}", {
+		const { data: patchResult } = await octokit.request("PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}", {
 			...prContext,
 			body,
 			comment_id: existingComment.id
@@ -24798,7 +24798,7 @@ const commentPr = async ({ githubToken, markdown, commentId }) => {
 			...prContext,
 			comment_id: existingComment.id
 		});
-		if (verification.body === body) return {
+		if (verification.body === patchResult.body) return {
 			action: "upsert",
 			commentBody: body
 		};

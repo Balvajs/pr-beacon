@@ -84,11 +84,14 @@ export const commentPr = async ({
       return { action: 'create' as const, commentBody: body };
     }
 
-    await octokit.request('PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}', {
-      ...prContext,
-      body,
-      comment_id: existingComment.id,
-    });
+    const { data: patchResult } = await octokit.request(
+      'PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}',
+      {
+        ...prContext,
+        body,
+        comment_id: existingComment.id,
+      },
+    );
 
     // Read back to verify our write was not clobbered by a concurrent job
     await sleep(RETRY_DELAY_MS);
@@ -97,7 +100,7 @@ export const commentPr = async ({
       { ...prContext, comment_id: existingComment.id },
     );
 
-    if (verification.body === body) {
+    if (verification.body === patchResult.body) {
       return { action: 'upsert' as const, commentBody: body };
     }
 
