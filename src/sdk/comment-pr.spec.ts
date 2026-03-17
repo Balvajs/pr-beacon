@@ -96,9 +96,9 @@ describe('commentPr – upsert (existing comment)', () => {
     );
     // PATCH + verification GET
     const newBody = `New body\n${FOOTER}`;
-    // Mock PATCH response (empty), then GET verification response with new body
+    // Mock PATCH response with stored body, then GET verification response with same body
     mockRequest
-      .mockResolvedValueOnce({ data: {} })
+      .mockResolvedValueOnce({ data: { body: newBody, id: 7 } })
       .mockResolvedValueOnce({ data: { body: newBody, id: 7 } });
 
     const result = await commentPr({
@@ -123,9 +123,10 @@ describe('commentPr – upsert (existing comment)', () => {
 
     let receivedPrev: string | undefined;
     const newContent = 'Updated content';
+    const newBody = `${newContent}\n${FOOTER}`;
     mockRequest
-      .mockResolvedValueOnce({ data: {} })
-      .mockResolvedValueOnce({ data: { body: `${newContent}\n${FOOTER}`, id: 11 } });
+      .mockResolvedValueOnce({ data: { body: newBody, id: 11 } })
+      .mockResolvedValueOnce({ data: { body: newBody, id: 11 } });
 
     await commentPr({
       commentId: 'PR-BEACON',
@@ -150,11 +151,11 @@ describe('commentPr – retry on concurrent update', () => {
       makeAsyncIterator([{ data: [{ body: existingBody, id: 5 }] }]),
     );
 
-    // Patch succeeds but verification shows a different body (clobbered)
-    // Expected full body would be: `My update${FOOTER}`
-    // Mock: PATCH attempt 1 succeeds, GET verification returns clobbered body
+    // Patch succeeds but verification shows a different body (clobbered by concurrent job)
+    // Mock: PATCH returns the stored body, but GET returns a different body written by another job
+    const writtenBody = `My update\n${FOOTER}`;
     mockRequest
-      .mockResolvedValueOnce({ data: {} })
+      .mockResolvedValueOnce({ data: { body: writtenBody, id: 5 } })
       .mockResolvedValueOnce({ data: { body: 'CLOBBERED', id: 5 } });
 
     // The retry wrapper from radashi is mocked to only run once. After exhausting
@@ -166,5 +167,32 @@ describe('commentPr – retry on concurrent update', () => {
     });
 
     expect(result).toEqual({ action: 'upsert', commentBody: '' });
+  });
+});
+
+describe('commentPr – GitHub body normalization', () => {
+  it('succeeds when GitHub normalizes the body but no concurrent write occurs', async () => {
+    const existingBody = `Old\n${FOOTER}`;
+    mockPaginateIterator.mockReturnValue(
+      makeAsyncIterator([{ data: [{ body: existingBody, id: 8 }] }]),
+    );
+
+    // PATCH and GET return the same normalized body (e.g., trailing newline added by GitHub),
+    // Which differs from the locally-computed one — verification should still pass
+    const normalizedBody = `New body\n${FOOTER}\n`;
+    mockRequest
+      .mockResolvedValueOnce({ data: { body: normalizedBody, id: 8 } })
+      .mockResolvedValueOnce({ data: { body: normalizedBody, id: 8 } });
+
+    const result = await commentPr({
+      commentId: 'PR-BEACON',
+      githubToken: 'tok',
+      markdown: 'New body',
+    });
+
+    expect(result).toEqual({
+      action: 'upsert',
+      commentBody: `New body\n${FOOTER}`,
+    });
   });
 });
