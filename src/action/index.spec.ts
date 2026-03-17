@@ -337,6 +337,62 @@ describe('action – fail-on-fail-message input', () => {
   });
 });
 
+describe('action – replace-mode input', () => {
+  it('passes replaceMode to submitPrBeacon when set to "in-place"', async () => {
+    mockGetInput.mockImplementation((name: string) => {
+      if (name === 'token') {
+        return 'tok';
+      }
+      if (name === 'replace-mode') {
+        return 'in-place';
+      }
+      return '';
+    });
+
+    await loadAndRunAction();
+
+    expect(mockSubmitPrBeacon).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({ replaceMode: 'in-place' }),
+    );
+  });
+
+  it('passes replaceMode to submitPrBeacon when set to "append"', async () => {
+    mockGetInput.mockImplementation((name: string) => {
+      if (name === 'token') {
+        return 'tok';
+      }
+      if (name === 'replace-mode') {
+        return 'append';
+      }
+      return '';
+    });
+
+    await loadAndRunAction();
+
+    expect(mockSubmitPrBeacon).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({ replaceMode: 'append' }),
+    );
+  });
+
+  it('passes replaceMode as undefined when not set', async () => {
+    mockGetInput.mockImplementation((name: string) => {
+      if (name === 'token') {
+        return 'tok';
+      }
+      return '';
+    });
+
+    await loadAndRunAction();
+
+    expect(mockSubmitPrBeacon).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({ replaceMode: undefined }),
+    );
+  });
+});
+
 describe('action – error handling', () => {
   it('calls setFailed when submitPrBeacon throws', async () => {
     mockGetInput.mockImplementation((name: string) => (name === 'token' ? 'tok' : ''));

@@ -24608,10 +24608,35 @@ const appendRowToTable = ({ comment, tableType, message }) => {
 	})}</table>${tableEndTag(tableType)}`);
 };
 const escapeRegExp = (value) => value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+const tableRowWithIdPattern = (id) => `<tr data-id="${escapeRegExp(escapeHTML(id))}">[\\S\\s]*?</tr>`;
 const regexps = {
 	table: (tableType) => new RegExp(`${tableStartTag(tableType)}[\\s\\S]*?${tableEndTag(tableType)}`, "gm"),
-	tableRowWithId: (id) => new RegExp(`<tr data-id="${escapeRegExp(escapeHTML(id))}">[\\S\\s]*?</tr>`, "gm"),
+	tableRowWithId: (id) => new RegExp(tableRowWithIdPattern(id), "gm"),
+	tableRowWithIdFirst: (id) => new RegExp(tableRowWithIdPattern(id), "m"),
 	tableWithContent: (tableType) => new RegExp(`${tableStartTag(tableType)}[\\s\\S]*?<td>[\\s\\S]*?${tableEndTag(tableType)}`, "gm")
+};
+const rowPlaceholder = (tableType, id) => `<!--row-placeholder-${tableType}-${escapeHTML(id)}-->`;
+/** Collect all IDs that need processing from contentIdsToUpdate and new table rows. */
+const collectAllIds = ({ contentIdsToUpdate, newTables }) => {
+	const tableContentIds = unique(tableTypesKeys.flatMap((tableType) => newTables[tableType].map(({ id }) => id).filter((id) => id !== void 0)));
+	return unique([...contentIdsToUpdate, ...tableContentIds]);
+};
+/** Append messages to an existing table section, or create a new table if empty. */
+const appendOrCreateTableSection = ({ beacon, messages, tableType }) => {
+	let result = beacon;
+	if (regexps.tableWithContent(tableType).test(result)) for (const message of messages) result = appendRowToTable({
+		comment: result,
+		message,
+		tableType
+	});
+	else {
+		const newTable = `${tableStartTag(tableType)}${createTable({
+			messages,
+			type: tableType
+		})}${tableEndTag(tableType)}`;
+		result = result.replace(regexps.table(tableType), newTable);
+	}
+	return result;
 };
 /**
 * Remove table rows that should be updated
@@ -24619,33 +24644,93 @@ const regexps = {
 */
 const removeTableRowsThatShouldUpdate = ({ oldBeacon, contentIdsToUpdate, newTables }) => {
 	let newBeacon = oldBeacon;
-	const tableContentIds = unique(tableTypesKeys.flatMap((tableType) => newTables[tableType].map(({ id }) => id).filter((id) => id !== void 0)));
-	const tableIdsToRemove = unique([...contentIdsToUpdate, ...tableContentIds]);
-	for (const tableIdToRemove of tableIdsToRemove) newBeacon = newBeacon.replaceAll(regexps.tableRowWithId(tableIdToRemove), "");
+	const idsToRemove = collectAllIds({
+		contentIdsToUpdate,
+		newTables
+	});
+	for (const id of idsToRemove) newBeacon = newBeacon.replaceAll(regexps.tableRowWithId(id), "");
+	return newBeacon;
+};
+/**
+* Replace table rows in-place: new rows take the position of the first matching old row,
+* preserving ordering. Remaining old rows with the same ID are removed.
+*
+* Placeholders are scoped by `(tableType, id)` so the same ID in different
+* table sections cannot collide.
+*/
+const replaceTableRowsInPlace = ({ oldBeacon, newTables, contentIdsToUpdate }) => {
+	let newBeacon = oldBeacon;
+	const allIdsToProcess = collectAllIds({
+		contentIdsToUpdate,
+		newTables
+	});
+	for (const tableType of tableTypesKeys) {
+		const sectionRegex = regexps.table(tableType);
+		newBeacon = newBeacon.replace(sectionRegex, (section) => {
+			let updatedSection = section;
+			for (const id of allIdsToProcess) {
+				const placeholder = rowPlaceholder(tableType, id);
+				updatedSection = updatedSection.replace(regexps.tableRowWithIdFirst(id), placeholder);
+				updatedSection = updatedSection.replaceAll(regexps.tableRowWithId(id), "");
+			}
+			return updatedSection;
+		});
+	}
+	for (const tableType of tableTypesKeys) {
+		const rowsByTableType = newTables[tableType];
+		const rowsById = /* @__PURE__ */ new Map();
+		const rowsWithoutId = [];
+		for (const message of rowsByTableType) if (message.id === void 0) rowsWithoutId.push(message);
+		else {
+			const existing = rowsById.get(message.id);
+			if (existing === void 0) rowsById.set(message.id, [message]);
+			else existing.push(message);
+		}
+		const appendQueue = [...rowsWithoutId];
+		for (const [id, messages] of rowsById) {
+			const placeholder = rowPlaceholder(tableType, id);
+			if (newBeacon.includes(placeholder)) {
+				const rowsHtml = messages.map((message) => tableRowTemplate({
+					message,
+					tableType
+				})).join("");
+				newBeacon = newBeacon.replace(placeholder, rowsHtml);
+				for (const message of messages) tableTypes[tableType].log(message.message, message.icon);
+			} else appendQueue.push(...messages);
+		}
+		if (appendQueue.length > 0) newBeacon = appendOrCreateTableSection({
+			beacon: newBeacon,
+			messages: appendQueue,
+			tableType
+		});
+	}
+	for (const tableType of tableTypesKeys) for (const id of allIdsToProcess) newBeacon = newBeacon.replaceAll(rowPlaceholder(tableType, id), "");
+	for (const tableType of tableTypesKeys) if (!regexps.tableWithContent(tableType).test(newBeacon)) {
+		const newTable = `${tableStartTag(tableType)}${tableEndTag(tableType)}`;
+		newBeacon = newBeacon.replace(regexps.table(tableType), newTable);
+	}
 	return newBeacon;
 };
 /**
 * Go through all table types and update all of them with data from `newTables`
 */
-const updateTables = ({ oldBeacon, newTables, contentIdsToUpdate }) => {
+const updateTables = ({ oldBeacon, newTables, contentIdsToUpdate, replaceMode = "in-place" }) => {
+	if (replaceMode === "in-place") return replaceTableRowsInPlace({
+		contentIdsToUpdate,
+		newTables,
+		oldBeacon
+	});
 	let newBeacon = oldBeacon;
 	newBeacon = removeTableRowsThatShouldUpdate({
 		contentIdsToUpdate,
 		newTables,
 		oldBeacon
 	});
-	for (const tableType of tableTypesKeys) if (regexps.tableWithContent(tableType).test(newBeacon)) for (const message of newTables[tableType]) newBeacon = appendRowToTable({
-		comment: newBeacon,
-		message,
+	for (const tableType of tableTypesKeys) newBeacon = appendOrCreateTableSection({
+		beacon: newBeacon,
+		messages: newTables[tableType],
 		tableType
 	});
-	else {
-		const newTable = `${tableStartTag(tableType)}${createTable({
-			messages: newTables[tableType],
-			type: tableType
-		})}${tableEndTag(tableType)}`;
-		newBeacon = newBeacon.replace(regexps.table(tableType), newTable);
-	}
 	return newBeacon;
 };
 
@@ -24845,13 +24930,14 @@ var PrBeacon = class PrBeacon {
 	* Is not meant to be called directly, but rather through `runPrBeacon` function
 	*/
 	async _submit(options = {}) {
-		const { contentIdsToUpdate = [getDefaultContentId()] } = options;
+		const { contentIdsToUpdate = [getDefaultContentId()], replaceMode } = options;
 		const updateReport = (oldBeacon) => {
 			let newBeacon = oldBeacon ?? emptyTablesTemplate;
 			newBeacon = updateTables({
 				contentIdsToUpdate,
 				newTables: this.tables,
-				oldBeacon: newBeacon
+				oldBeacon: newBeacon,
+				replaceMode
 			});
 			newBeacon = updateMarkdowns({
 				contentIdsToUpdate,
@@ -24904,7 +24990,10 @@ const jsonPayloadSchema = object({
 	fails: array(tableRowSchema).optional(),
 	markdowns: array(markdownEntrySchema).optional(),
 	messages: array(tableRowSchema).optional(),
-	options: object({ contentIdsToUpdate: array(string()).optional() }).optional(),
+	options: object({
+		contentIdsToUpdate: array(string()).optional(),
+		replaceMode: _enum(["in-place", "append"]).optional()
+	}).optional(),
 	warnings: array(tableRowSchema).optional()
 });
 /** Return `undefined` when an action input is empty/unset. */
@@ -24978,8 +25067,11 @@ try {
 	const markdownId = optionalInput("markdown-id");
 	const contentIdsToUpdateRaw = optionalInput("content-ids-to-update");
 	const shouldFailOnFailMessage = optionalInput("fail-on-fail-message") === "true";
+	const replaceModeRaw = optionalInput("replace-mode");
+	const replaceMode = replaceModeRaw === "in-place" || replaceModeRaw === "append" ? replaceModeRaw : void 0;
 	const contentIdsToUpdate = contentIdsToUpdateRaw === void 0 || contentIdsToUpdateRaw === "" ? void 0 : contentIdsToUpdateRaw.split(",").map((entry) => entry.trim()).filter(Boolean);
 	const resolvedContentIdsToUpdate = jsonPayload?.options?.contentIdsToUpdate ?? contentIdsToUpdate;
+	const resolvedReplaceMode = jsonPayload?.options?.replaceMode ?? replaceMode;
 	const buildBeaconCallback = (prBeacon) => {
 		if (jsonPayload !== void 0) applyJsonPayload(prBeacon, jsonPayload);
 		applyIndividualInputs(prBeacon, {
@@ -24998,6 +25090,7 @@ try {
 	};
 	await submitPrBeacon(buildBeaconCallback, {
 		contentIdsToUpdate: resolvedContentIdsToUpdate,
+		replaceMode: resolvedReplaceMode,
 		shouldFailOnFailMessage
 	});
 } catch (error) {

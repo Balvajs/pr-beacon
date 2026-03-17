@@ -93,16 +93,71 @@ const appendRowToTable = ({
 const escapeRegExp = (value: string): string =>
   value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 
+export type ReplaceMode = 'in-place' | 'append';
+
+const tableRowWithIdPattern = (id: string): string =>
+  `<tr data-id="${escapeRegExp(escapeHTML(id))}">[\\S\\s]*?</tr>`;
+
 const regexps = {
   table: (tableType: TableType): RegExp =>
     new RegExp(`${tableStartTag(tableType)}[\\s\\S]*?${tableEndTag(tableType)}`, 'gm'),
-  tableRowWithId: (id: string): RegExp =>
-    new RegExp(`<tr data-id="${escapeRegExp(escapeHTML(id))}">[\\S\\s]*?</tr>`, 'gm'),
+  tableRowWithId: (id: string): RegExp => new RegExp(tableRowWithIdPattern(id), 'gm'),
+  tableRowWithIdFirst: (id: string): RegExp => new RegExp(tableRowWithIdPattern(id), 'm'),
   tableWithContent: (tableType: TableType): RegExp =>
     new RegExp(
       `${tableStartTag(tableType)}[\\s\\S]*?<td>[\\s\\S]*?${tableEndTag(tableType)}`,
       'gm',
     ),
+};
+
+const rowPlaceholder = (tableType: TableType, id: string): string =>
+  `<!--row-placeholder-${tableType}-${escapeHTML(id)}-->`;
+
+/** Collect all IDs that need processing from contentIdsToUpdate and new table rows. */
+const collectAllIds = ({
+  contentIdsToUpdate,
+  newTables,
+}: {
+  contentIdsToUpdate: string[];
+  newTables: Record<TableType, TableRowMessage[]>;
+}): string[] => {
+  const tableContentIds = unique(
+    tableTypesKeys.flatMap((tableType) =>
+      newTables[tableType].map(({ id }) => id).filter((id): id is string => id !== undefined),
+    ),
+  );
+  return unique([...contentIdsToUpdate, ...tableContentIds]);
+};
+
+/** Append messages to an existing table section, or create a new table if empty. */
+const appendOrCreateTableSection = ({
+  beacon,
+  messages,
+  tableType,
+}: {
+  beacon: string;
+  messages: TableRowMessage[];
+  tableType: TableType;
+}): string => {
+  let result = beacon;
+
+  if (regexps.tableWithContent(tableType).test(result)) {
+    for (const message of messages) {
+      result = appendRowToTable({
+        comment: result,
+        message,
+        tableType,
+      });
+    }
+  } else {
+    const newTable = `${tableStartTag(tableType)}${createTable({
+      messages,
+      type: tableType,
+    })}${tableEndTag(tableType)}`;
+    result = result.replace(regexps.table(tableType), newTable);
+  }
+
+  return result;
 };
 
 /**
@@ -120,16 +175,114 @@ const removeTableRowsThatShouldUpdate = ({
 }): string => {
   let newBeacon = oldBeacon;
 
-  const tableContentIds = unique(
-    tableTypesKeys.flatMap((tableType) =>
-      newTables[tableType].map(({ id }) => id).filter((id): id is string => id !== undefined),
-    ),
-  );
+  const idsToRemove = collectAllIds({ contentIdsToUpdate, newTables });
 
-  const tableIdsToRemove = unique([...contentIdsToUpdate, ...tableContentIds]);
+  for (const id of idsToRemove) {
+    newBeacon = newBeacon.replaceAll(regexps.tableRowWithId(id), '');
+  }
 
-  for (const tableIdToRemove of tableIdsToRemove) {
-    newBeacon = newBeacon.replaceAll(regexps.tableRowWithId(tableIdToRemove), '');
+  return newBeacon;
+};
+
+/**
+ * Replace table rows in-place: new rows take the position of the first matching old row,
+ * preserving ordering. Remaining old rows with the same ID are removed.
+ *
+ * Placeholders are scoped by `(tableType, id)` so the same ID in different
+ * table sections cannot collide.
+ */
+const replaceTableRowsInPlace = ({
+  oldBeacon,
+  newTables,
+  contentIdsToUpdate,
+}: {
+  oldBeacon: string;
+  newTables: Record<TableType, TableRowMessage[]>;
+  contentIdsToUpdate: string[];
+}): string => {
+  let newBeacon = oldBeacon;
+
+  const allIdsToProcess = collectAllIds({ contentIdsToUpdate, newTables });
+
+  // Step 1: For each table section and ID, replace the FIRST row within that
+  // Section with a scoped placeholder and remove the rest. Operating per-section
+  // Avoids cross-table collisions when the same ID appears in multiple tables.
+  for (const tableType of tableTypesKeys) {
+    const sectionRegex = regexps.table(tableType);
+    newBeacon = newBeacon.replace(sectionRegex, (section) => {
+      let updatedSection = section;
+      for (const id of allIdsToProcess) {
+        const placeholder = rowPlaceholder(tableType, id);
+        updatedSection = updatedSection.replace(regexps.tableRowWithIdFirst(id), placeholder);
+        updatedSection = updatedSection.replaceAll(regexps.tableRowWithId(id), '');
+      }
+      return updatedSection;
+    });
+  }
+
+  // Step 2: For each table type, group new rows by ID and replace placeholders
+  for (const tableType of tableTypesKeys) {
+    const rowsByTableType = newTables[tableType];
+
+    // Group rows by ID
+    const rowsById = new Map<string, TableRowMessage[]>();
+    const rowsWithoutId: TableRowMessage[] = [];
+
+    for (const message of rowsByTableType) {
+      if (message.id === undefined) {
+        rowsWithoutId.push(message);
+      } else {
+        const existing = rowsById.get(message.id);
+        if (existing === undefined) {
+          rowsById.set(message.id, [message]);
+        } else {
+          existing.push(message);
+        }
+      }
+    }
+
+    // Replace placeholders with grouped rows
+    const appendQueue: TableRowMessage[] = [...rowsWithoutId];
+
+    for (const [id, messages] of rowsById) {
+      const placeholder = rowPlaceholder(tableType, id);
+      if (newBeacon.includes(placeholder)) {
+        const rowsHtml = messages
+          .map((message) => tableRowTemplate({ message, tableType }))
+          .join('');
+        newBeacon = newBeacon.replace(placeholder, rowsHtml);
+        // Log the messages
+        for (const message of messages) {
+          tableTypes[tableType].log(message.message, message.icon);
+        }
+      } else {
+        appendQueue.push(...messages);
+      }
+    }
+
+    // Append remaining rows (no placeholder found) to the table
+    if (appendQueue.length > 0) {
+      newBeacon = appendOrCreateTableSection({
+        beacon: newBeacon,
+        messages: appendQueue,
+        tableType,
+      });
+    }
+  }
+
+  // Step 3: Clean up leftover placeholders (IDs that were only removed, not replaced)
+  for (const tableType of tableTypesKeys) {
+    for (const id of allIdsToProcess) {
+      newBeacon = newBeacon.replaceAll(rowPlaceholder(tableType, id), '');
+    }
+  }
+
+  // Handle empty table sections: if a table section has no content, recreate it empty
+  for (const tableType of tableTypesKeys) {
+    if (!regexps.tableWithContent(tableType).test(newBeacon)) {
+      const newTable = `${tableStartTag(tableType)}${tableEndTag(tableType)}`;
+      newBeacon = newBeacon.replace(regexps.table(tableType), newTable);
+    }
   }
 
   return newBeacon;
@@ -142,11 +295,17 @@ export const updateTables = ({
   oldBeacon,
   newTables,
   contentIdsToUpdate,
+  replaceMode = 'in-place',
 }: {
   oldBeacon: string;
   newTables: Record<TableType, TableRowMessage[]>;
   contentIdsToUpdate: string[];
+  replaceMode?: ReplaceMode;
 }): string => {
+  if (replaceMode === 'in-place') {
+    return replaceTableRowsInPlace({ contentIdsToUpdate, newTables, oldBeacon });
+  }
+
   let newBeacon = oldBeacon;
 
   newBeacon = removeTableRowsThatShouldUpdate({
@@ -156,24 +315,11 @@ export const updateTables = ({
   });
 
   for (const tableType of tableTypesKeys) {
-    // If the table has already some content (some <td>), append new rows to the table
-    if (regexps.tableWithContent(tableType).test(newBeacon)) {
-      for (const message of newTables[tableType]) {
-        newBeacon = appendRowToTable({
-          comment: newBeacon,
-          message,
-          tableType: tableType,
-        });
-      }
-    } else {
-      const newTable = `${tableStartTag(tableType)}${createTable({
-        messages: newTables[tableType],
-        type: tableType,
-      })}${tableEndTag(tableType)}`;
-
-      // Replace existing table tags with new table
-      newBeacon = newBeacon.replace(regexps.table(tableType), newTable);
-    }
+    newBeacon = appendOrCreateTableSection({
+      beacon: newBeacon,
+      messages: newTables[tableType],
+      tableType,
+    });
   }
 
   return newBeacon;

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { ReplaceMode } from './beacon-table.ts';
 import { emptyTablesTemplate, updateTables } from './beacon-table.ts';
 
 // Mock @actions/core before importing the module under test
@@ -206,5 +207,277 @@ describe('updateTables – contentIdsToUpdate removal', () => {
 
     expect(cleared).not.toContain('<table>');
     expect(cleared).not.toContain('will be removed');
+  });
+});
+
+describe('updateTables – in-place replaceMode (default)', () => {
+  it('preserves row ordering when re-running a job', () => {
+    // Job A and Job B both add rows
+    const afterJobA = updateTables({
+      contentIdsToUpdate: ['ci/job-a'],
+      newTables: {
+        fails: [],
+        messages: [{ id: 'ci/job-a', message: 'Row A original' }],
+        warnings: [],
+      },
+      oldBeacon: emptyTablesTemplate,
+    });
+
+    const afterJobB = updateTables({
+      contentIdsToUpdate: ['ci/job-b'],
+      newTables: {
+        fails: [],
+        messages: [{ id: 'ci/job-b', message: 'Row B' }],
+        warnings: [],
+      },
+      oldBeacon: afterJobA,
+    });
+
+    // Re-run Job A — updated row should appear BEFORE Row B
+    const afterRerunA = updateTables({
+      contentIdsToUpdate: ['ci/job-a'],
+      newTables: {
+        fails: [],
+        messages: [{ id: 'ci/job-a', message: 'Row A updated' }],
+        warnings: [],
+      },
+      oldBeacon: afterJobB,
+    });
+
+    expect(afterRerunA).toContain('Row A updated');
+    expect(afterRerunA).toContain('Row B');
+    expect(afterRerunA).not.toContain('Row A original');
+    expect(afterRerunA.indexOf('Row A updated')).toBeLessThan(afterRerunA.indexOf('Row B'));
+  });
+
+  it('falls back to append when no existing row matches the ID', () => {
+    const initial = updateTables({
+      contentIdsToUpdate: ['ci/job-a'],
+      newTables: {
+        fails: [],
+        messages: [{ id: 'ci/job-a', message: 'Row A' }],
+        warnings: [],
+      },
+      oldBeacon: emptyTablesTemplate,
+    });
+
+    // New ID with no previous row — should be appended
+    const result = updateTables({
+      contentIdsToUpdate: ['ci/job-b'],
+      newTables: {
+        fails: [],
+        messages: [{ id: 'ci/job-b', message: 'Row B new' }],
+        warnings: [],
+      },
+      oldBeacon: initial,
+    });
+
+    expect(result).toContain('Row A');
+    expect(result).toContain('Row B new');
+    expect(result.indexOf('Row A')).toBeLessThan(result.indexOf('Row B new'));
+  });
+
+  it('replaces only the first duplicate old row and removes the rest', () => {
+    // Manually create a beacon with duplicate rows for the same ID
+    const initial = updateTables({
+      contentIdsToUpdate: ['ci/job'],
+      newTables: {
+        fails: [],
+        messages: [
+          { id: 'ci/job', message: 'Row 1' },
+          { id: 'ci/job', message: 'Row 2' },
+        ],
+        warnings: [],
+      },
+      oldBeacon: emptyTablesTemplate,
+    });
+
+    expect(initial).toContain('Row 1');
+    expect(initial).toContain('Row 2');
+
+    // Re-run with single new row — should replace at first position, remove second
+    const result = updateTables({
+      contentIdsToUpdate: ['ci/job'],
+      newTables: {
+        fails: [],
+        messages: [{ id: 'ci/job', message: 'Row updated' }],
+        warnings: [],
+      },
+      oldBeacon: initial,
+    });
+
+    expect(result).toContain('Row updated');
+    expect(result).not.toContain('Row 1');
+    expect(result).not.toContain('Row 2');
+  });
+
+  it('inserts multiple new rows with the same ID together at the placeholder position', () => {
+    const initial = updateTables({
+      contentIdsToUpdate: ['ci/job-a'],
+      newTables: {
+        fails: [],
+        messages: [{ id: 'ci/job-a', message: 'Row A' }],
+        warnings: [],
+      },
+      oldBeacon: emptyTablesTemplate,
+    });
+
+    const withB = updateTables({
+      contentIdsToUpdate: ['ci/job-b'],
+      newTables: {
+        fails: [],
+        messages: [{ id: 'ci/job-b', message: 'Row B' }],
+        warnings: [],
+      },
+      oldBeacon: initial,
+    });
+
+    // Re-run job A with multiple rows
+    const result = updateTables({
+      contentIdsToUpdate: ['ci/job-a'],
+      newTables: {
+        fails: [],
+        messages: [
+          { id: 'ci/job-a', message: 'Row A first' },
+          { id: 'ci/job-a', message: 'Row A second' },
+        ],
+        warnings: [],
+      },
+      oldBeacon: withB,
+    });
+
+    expect(result).toContain('Row A first');
+    expect(result).toContain('Row A second');
+    expect(result).toContain('Row B');
+    expect(result.indexOf('Row A first')).toBeLessThan(result.indexOf('Row A second'));
+    expect(result.indexOf('Row A second')).toBeLessThan(result.indexOf('Row B'));
+  });
+
+  it('handles the same ID across different table types without cross-table collision', () => {
+    // Job writes both a warning and a message with the same ID
+    const initial = updateTables({
+      contentIdsToUpdate: ['ci/job'],
+      newTables: {
+        fails: [],
+        messages: [{ id: 'ci/job', message: 'Msg original' }],
+        warnings: [{ id: 'ci/job', message: 'Warn original' }],
+      },
+      oldBeacon: emptyTablesTemplate,
+    });
+
+    expect(initial).toContain('Msg original');
+    expect(initial).toContain('Warn original');
+
+    // Re-run: update both table types with the same ID
+    const result = updateTables({
+      contentIdsToUpdate: ['ci/job'],
+      newTables: {
+        fails: [],
+        messages: [{ id: 'ci/job', message: 'Msg updated' }],
+        warnings: [{ id: 'ci/job', message: 'Warn updated' }],
+      },
+      oldBeacon: initial,
+    });
+
+    expect(result).toContain('Msg updated');
+    expect(result).toContain('Warn updated');
+    expect(result).not.toContain('Msg original');
+    expect(result).not.toContain('Warn original');
+
+    // Verify rows are in their correct table sections
+    const warningsSection = result.match(
+      /<!--warnings-section-->[\s\S]*?<!--warnings-section-end-->/,
+    )?.[0];
+    const messagesSection = result.match(
+      /<!--messages-section-->[\s\S]*?<!--messages-section-end-->/,
+    )?.[0];
+
+    expect(warningsSection).toContain('Warn updated');
+    expect(warningsSection).not.toContain('Msg updated');
+    expect(messagesSection).toContain('Msg updated');
+    expect(messagesSection).not.toContain('Warn updated');
+  });
+
+  it('handles an ID that moves between table types on re-run', () => {
+    // First run: ci/job produces a message
+    const initial = updateTables({
+      contentIdsToUpdate: ['ci/job'],
+      newTables: {
+        fails: [],
+        messages: [{ id: 'ci/job', message: 'All good' }],
+        warnings: [],
+      },
+      oldBeacon: emptyTablesTemplate,
+    });
+
+    // Re-run: ci/job now produces a warning instead of a message
+    const result = updateTables({
+      contentIdsToUpdate: ['ci/job'],
+      newTables: {
+        fails: [],
+        messages: [],
+        warnings: [{ id: 'ci/job', message: 'Something suspicious' }],
+      },
+      oldBeacon: initial,
+    });
+
+    expect(result).toContain('Something suspicious');
+    expect(result).not.toContain('All good');
+
+    // Warning row must be in warnings section, not messages
+    const warningsSection = result.match(
+      /<!--warnings-section-->[\s\S]*?<!--warnings-section-end-->/,
+    )?.[0];
+    const messagesSection = result.match(
+      /<!--messages-section-->[\s\S]*?<!--messages-section-end-->/,
+    )?.[0];
+
+    expect(warningsSection).toContain('Something suspicious');
+    expect(messagesSection).not.toContain('Something suspicious');
+  });
+});
+
+describe('updateTables – append replaceMode', () => {
+  const replaceMode: ReplaceMode = 'append';
+
+  it('appends updated rows after existing rows', () => {
+    const afterJobA = updateTables({
+      contentIdsToUpdate: ['ci/job-a'],
+      newTables: {
+        fails: [],
+        messages: [{ id: 'ci/job-a', message: 'Row A original' }],
+        warnings: [],
+      },
+      oldBeacon: emptyTablesTemplate,
+      replaceMode,
+    });
+
+    const afterJobB = updateTables({
+      contentIdsToUpdate: ['ci/job-b'],
+      newTables: {
+        fails: [],
+        messages: [{ id: 'ci/job-b', message: 'Row B' }],
+        warnings: [],
+      },
+      oldBeacon: afterJobA,
+      replaceMode,
+    });
+
+    // Re-run Job A — updated row should appear AFTER Row B (append behavior)
+    const afterRerunA = updateTables({
+      contentIdsToUpdate: ['ci/job-a'],
+      newTables: {
+        fails: [],
+        messages: [{ id: 'ci/job-a', message: 'Row A updated' }],
+        warnings: [],
+      },
+      oldBeacon: afterJobB,
+      replaceMode,
+    });
+
+    expect(afterRerunA).toContain('Row A updated');
+    expect(afterRerunA).toContain('Row B');
+    expect(afterRerunA).not.toContain('Row A original');
+    expect(afterRerunA.indexOf('Row B')).toBeLessThan(afterRerunA.indexOf('Row A updated'));
   });
 });

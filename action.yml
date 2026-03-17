@@ -18,7 +18,7 @@ inputs:
           "warnings": [ string | { message, icon?, id? } ],
           "messages": [ string | { message, icon?, id? } ],
           "markdowns": [ string | { message, id? } ],
-          "options": { "contentIdsToUpdate"?: string[] }
+          "options": { "contentIdsToUpdate"?: string[], "replaceMode"?: "in-place" | "append" }
         }
     required: false
     default: ''
@@ -86,6 +86,14 @@ inputs:
     description: |
       Comma-separated list of content IDs that should be removed before new content
       is added. Useful in subsequent jobs that own specific named sections.
+    required: false
+    default: ''
+
+  replace-mode:
+    description: |
+      Controls how updated table rows are positioned relative to existing rows.
+      'in-place' (default): rows replace at the position of the first old row with the same ID.
+      'append': old rows are removed and new rows are appended at the end of the table.
     required: false
     default: ''
 

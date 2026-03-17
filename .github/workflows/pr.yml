@@ -86,7 +86,7 @@ jobs:
 
       - name: Build dist fail message
         id: dist-fail-message
-        if: steps.verify-changed-files.outputs.files_changed == 'true'
+        if: failure() && steps.verify-changed-files.outputs.files_changed == 'true'
         env:
           CHANGED_FILES: ${{ steps.verify-changed-files.outputs.changed_files }}
         run: |
