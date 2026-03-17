@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/Balvajs/pr-beacon/compare/v1.1.1...v1.2.0) (2026-03-17)
+
+
+### Features
+
+* add replaceMode option for in-place table row replacement ([#16](https://github.com/Balvajs/pr-beacon/issues/16)) ([c5071aa](https://github.com/Balvajs/pr-beacon/commit/c5071aae547a0a32badb24e0d0abbf241a737886))
+
 ## [1.1.1](https://github.com/Balvajs/pr-beacon/compare/v1.1.0...v1.1.1) (2026-03-02)
 
 
