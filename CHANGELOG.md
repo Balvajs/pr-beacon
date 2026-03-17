@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/Balvajs/pr-beacon/compare/v1.2.0...v1.2.1) (2026-03-17)
+
+
+### Bug Fixes
+
+* concurrency check false positives from GitHub body normalization ([#18](https://github.com/Balvajs/pr-beacon/issues/18)) ([2d078c5](https://github.com/Balvajs/pr-beacon/commit/2d078c54ccaabda5c16b6ed66ff8805119fd2821))
+
 ## [1.2.0](https://github.com/Balvajs/pr-beacon/compare/v1.1.1...v1.2.0) (2026-03-17)
 
 
