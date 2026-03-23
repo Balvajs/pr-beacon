@@ -5,6 +5,7 @@ import * as os$1 from "os";
 import os, { EOL } from "os";
 import * as fs from "fs";
 import { constants, existsSync, promises, readFileSync as readFileSync$1 } from "fs";
+import { randomUUID } from "node:crypto";
 
 //#region \0rolldown/runtime.js
 var __create = Object.create;
@@ -24750,6 +24751,8 @@ const getPrContext = () => ({
 //#region src/sdk/comment-pr.ts
 const MAX_RETRIES = 5;
 const RETRY_DELAY_MS = 500;
+const JITTER_MIN_FACTOR = .5;
+const WRITE_NONCE_PATTERN = /\n<!--write-nonce:[a-f0-9-]+-->/g;
 const findBeaconComment = async (octokit, prContext, commentFooter) => {
 	for await (const page of octokit.paginate.iterator("GET /repos/{owner}/{repo}/issues/{issue_number}/comments", prContext)) {
 		const found = page.data.find((comment) => Boolean(comment.body?.includes(commentFooter)));
@@ -24761,23 +24764,25 @@ const findBeaconComment = async (octokit, prContext, commentFooter) => {
 *
 * Operates in `upsert` mode which creates sticky comment (it stays in the same place in the PR comment section).
 *
-* Uses optimistic locking with read-after-write verification to handle concurrent writes from
-* parallel CI jobs. If another job overwrites the comment between our write and the verification
-* read, we retry up to MAX_RETRIES times, re-fetching the latest body each time so no update
-* is ever lost.
+* Uses a write nonce with read-after-write verification to mitigate concurrent writes from
+* parallel CI jobs. Each write embeds a unique nonce; if the nonce is missing from the
+* verification read, another job overwrote us and we retry up to MAX_RETRIES times,
+* re-fetching the latest body each time to reduce the chance of lost updates under concurrent writers.
+* Retry delays are jittered to desynchronize concurrent jobs.
 */
 const commentPr = async ({ githubToken, markdown, commentId }) => {
 	const octokit = getOctokit({ token: githubToken });
 	const prContext = getPrContext();
 	const commentFooter = `<!--dx-github-pr-generated-comment:${commentId}-->`;
-	let attempts = 0;
 	return retry({
-		delay: RETRY_DELAY_MS,
+		backoff: () => Math.floor(RETRY_DELAY_MS * JITTER_MIN_FACTOR + Math.random() * RETRY_DELAY_MS),
 		times: MAX_RETRIES
 	}, async () => {
 		const existingComment = await findBeaconComment(octokit, prContext, commentFooter);
-		const previousBody = existingComment?.body?.replace(commentFooter, "");
-		const body = typeof markdown === "string" ? `${markdown}\n${commentFooter}` : `${markdown(previousBody)}\n${commentFooter}`;
+		const previousBody = existingComment?.body?.replace(WRITE_NONCE_PATTERN, "").replace(commentFooter, "");
+		const bodyContent = typeof markdown === "string" ? markdown : markdown(previousBody);
+		const nonce = `<!--write-nonce:${randomUUID()}-->`;
+		const body = `${bodyContent}\n${nonce}\n${commentFooter}`;
 		if (existingComment === void 0) {
 			await octokit.request("POST /repos/{owner}/{repo}/issues/{issue_number}/comments", {
 				...prContext,
@@ -24788,22 +24793,20 @@ const commentPr = async ({ githubToken, markdown, commentId }) => {
 				commentBody: body
 			};
 		}
-		const { data: patchResult } = await octokit.request("PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}", {
+		await octokit.request("PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}", {
 			...prContext,
 			body,
 			comment_id: existingComment.id
 		});
-		await sleep(RETRY_DELAY_MS);
 		const { data: verification } = await octokit.request("GET /repos/{owner}/{repo}/issues/comments/{comment_id}", {
 			...prContext,
 			comment_id: existingComment.id
 		});
-		if (verification.body === patchResult.body) return {
+		if (verification.body?.includes(nonce)) return {
 			action: "upsert",
 			commentBody: body
 		};
-		attempts += 1;
-		throw new Error(`Failed to write PR beacon comment after ${attempts} attempts due to concurrent updates.`);
+		throw new Error("Write was clobbered by a concurrent update.");
 	}).catch(() => {
 		warning(`Failed to update PR comment after ${MAX_RETRIES} attempts due to concurrent updates.`);
 		return {
