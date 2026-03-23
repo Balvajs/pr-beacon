@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.2](https://github.com/Balvajs/pr-beacon/compare/v1.2.1...v1.2.2) (2026-03-23)
+
+
+### Bug Fixes
+
+* replace body comparison with nonce-based write verification ([#20](https://github.com/Balvajs/pr-beacon/issues/20)) ([bfd4258](https://github.com/Balvajs/pr-beacon/commit/bfd42588ef69940422cc7d09d9c6b80b1e2569fb))
+
 ## [1.2.1](https://github.com/Balvajs/pr-beacon/compare/v1.2.0...v1.2.1) (2026-03-17)
 
 
