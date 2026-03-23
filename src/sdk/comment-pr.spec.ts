@@ -31,15 +31,21 @@ vi.mock('radashi', async (importOriginal) => {
     ...actual,
     // Make retry execute the function once immediately without delays
     retry: vi.fn(async (_opts: unknown, fn: () => Promise<unknown>) => fn()),
-    sleep: vi.fn(),
   };
 });
+
+const MOCK_UUID = 'a0b1c2d3-e4f5-6789-abcd-ef0123456789';
+
+vi.mock('node:crypto', () => ({
+  randomUUID: vi.fn(() => MOCK_UUID),
+}));
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 const FOOTER = '<!--dx-github-pr-generated-comment:PR-BEACON-->';
+const NONCE = `<!--write-nonce:${MOCK_UUID}-->`;
 
 type IteratorPage = { data: { id: number; body: string }[] };
 
@@ -65,6 +71,7 @@ describe('commentPr – create (no existing comment)', () => {
 
     expect(result.action).toBe('create');
     expect(result.commentBody).toContain('Hello PR');
+    expect(result.commentBody).toContain(NONCE);
     expect(result.commentBody).toContain(FOOTER);
 
     // Should have called POST
@@ -95,11 +102,11 @@ describe('commentPr – upsert (existing comment)', () => {
       makeAsyncIterator([{ data: [{ body: existingBody, id: 7 }] }]),
     );
     // PATCH + verification GET
-    const newBody = `New body\n${FOOTER}`;
-    // Mock PATCH response with stored body, then GET verification response with same body
+    const verifiedBody = `New body\n${NONCE}\n${FOOTER}`;
+    // PATCH (result unused), then GET verification
     mockRequest
-      .mockResolvedValueOnce({ data: { body: newBody, id: 7 } })
-      .mockResolvedValueOnce({ data: { body: newBody, id: 7 } });
+      .mockResolvedValueOnce({ data: { id: 7 } })
+      .mockResolvedValueOnce({ data: { body: verifiedBody, id: 7 } });
 
     const result = await commentPr({
       commentId: 'PR-BEACON',
@@ -114,19 +121,20 @@ describe('commentPr – upsert (existing comment)', () => {
     );
   });
 
-  it('passes the previous comment body (without footer) to the markdown function', async () => {
+  it('passes the previous comment body (without footer and nonce) to the markdown function', async () => {
     const previousContent = 'This is the old content';
-    const existingBody = `${previousContent}\n${FOOTER}`;
+    const existingBody = `${previousContent}\n<!--write-nonce:00000000-0000-0000-0000-000000000000-->\n${FOOTER}`;
     mockPaginateIterator.mockReturnValue(
       makeAsyncIterator([{ data: [{ body: existingBody, id: 11 }] }]),
     );
 
     let receivedPrev: string | undefined;
     const newContent = 'Updated content';
-    const newBody = `${newContent}\n${FOOTER}`;
+    const verifiedBody = `${newContent}\n${NONCE}\n${FOOTER}`;
+    // PATCH, then GET verification
     mockRequest
-      .mockResolvedValueOnce({ data: { body: newBody, id: 11 } })
-      .mockResolvedValueOnce({ data: { body: newBody, id: 11 } });
+      .mockResolvedValueOnce({ data: { id: 11 } })
+      .mockResolvedValueOnce({ data: { body: verifiedBody, id: 11 } });
 
     await commentPr({
       commentId: 'PR-BEACON',
@@ -137,29 +145,29 @@ describe('commentPr – upsert (existing comment)', () => {
       },
     });
 
-    // The footer should have been stripped from the previous body
+    // Both the footer and write nonce should have been stripped from the previous body
     expect(receivedPrev).not.toContain(FOOTER);
+    expect(receivedPrev).not.toContain('write-nonce');
     expect(receivedPrev).toContain(previousContent);
   });
 });
 
 describe('commentPr – retry on concurrent update', () => {
-  it('retries when the verification read does not match the written body', async () => {
+  it('retries when the write nonce is not found in verification read', async () => {
     const existingBody = `Old\n${FOOTER}`;
     // Return the existing comment on each attempt
     mockPaginateIterator.mockImplementation(() =>
       makeAsyncIterator([{ data: [{ body: existingBody, id: 5 }] }]),
     );
 
-    // Patch succeeds but verification shows a different body (clobbered by concurrent job)
-    // Mock: PATCH returns the stored body, but GET returns a different body written by another job
-    const writtenBody = `My update\n${FOOTER}`;
+    // PATCH succeeds but GET returns a body clobbered by another job (no nonce)
+    // PATCH, then GET (clobbered — no nonce)
     mockRequest
-      .mockResolvedValueOnce({ data: { body: writtenBody, id: 5 } })
+      .mockResolvedValueOnce({ data: { id: 5 } })
       .mockResolvedValueOnce({ data: { body: 'CLOBBERED', id: 5 } });
 
-    // The retry wrapper from radashi is mocked to only run once. After exhausting
-    // Retries the implementation swallows the error and resolves silently.
+    // Retry wrapper from radashi is mocked to only run once —
+    // After exhausting all attempts the implementation swallows the error and resolves silently.
     const result = await commentPr({
       commentId: 'PR-BEACON',
       githubToken: 'tok',
@@ -171,17 +179,18 @@ describe('commentPr – retry on concurrent update', () => {
 });
 
 describe('commentPr – GitHub body normalization', () => {
-  it('succeeds when GitHub normalizes the body but no concurrent write occurs', async () => {
+  it('succeeds when GitHub normalizes the body as long as write nonce survives', async () => {
     const existingBody = `Old\n${FOOTER}`;
     mockPaginateIterator.mockReturnValue(
       makeAsyncIterator([{ data: [{ body: existingBody, id: 8 }] }]),
     );
 
-    // PATCH and GET return the same normalized body (e.g., trailing newline added by GitHub),
-    // Which differs from the locally-computed one — verification should still pass
-    const normalizedBody = `New body\n${FOOTER}\n`;
+    // GET returns a normalized body (e.g., trailing newline added by GitHub)
+    // But the write nonce is still present — verification should pass
+    const normalizedBody = `New body\n${NONCE}\n${FOOTER}\n`;
+    // PATCH, then GET (normalized but nonce intact)
     mockRequest
-      .mockResolvedValueOnce({ data: { body: normalizedBody, id: 8 } })
+      .mockResolvedValueOnce({ data: { id: 8 } })
       .mockResolvedValueOnce({ data: { body: normalizedBody, id: 8 } });
 
     const result = await commentPr({
@@ -192,7 +201,7 @@ describe('commentPr – GitHub body normalization', () => {
 
     expect(result).toEqual({
       action: 'upsert',
-      commentBody: `New body\n${FOOTER}`,
+      commentBody: `New body\n${NONCE}\n${FOOTER}`,
     });
   });
 });
