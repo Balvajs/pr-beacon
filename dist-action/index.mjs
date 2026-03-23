@@ -24764,10 +24764,10 @@ const findBeaconComment = async (octokit, prContext, commentFooter) => {
 *
 * Operates in `upsert` mode which creates sticky comment (it stays in the same place in the PR comment section).
 *
-* Uses a write nonce with read-after-write verification to handle concurrent writes from
+* Uses a write nonce with read-after-write verification to mitigate concurrent writes from
 * parallel CI jobs. Each write embeds a unique nonce; if the nonce is missing from the
 * verification read, another job overwrote us and we retry up to MAX_RETRIES times,
-* re-fetching the latest body each time so no update is ever lost.
+* re-fetching the latest body each time to reduce the chance of lost updates under concurrent writers.
 * Retry delays are jittered to desynchronize concurrent jobs.
 */
 const commentPr = async ({ githubToken, markdown, commentId }) => {
