@@ -16332,6 +16332,112 @@ function info(message) {
 }
 
 //#endregion
+//#region node_modules/radashi/dist/radashi.js
+function diff(root, other, identity2 = (t) => t) {
+	if (!(root == null ? void 0 : root.length) && !(other == null ? void 0 : other.length)) return [];
+	if ((root == null ? void 0 : root.length) === void 0) return [...other];
+	if (!(other == null ? void 0 : other.length)) return [...root];
+	const bKeys = other.reduce((acc, item) => {
+		acc[identity2(item)] = true;
+		return acc;
+	}, {});
+	return root.filter((a) => !bKeys[identity2(a)]);
+}
+function select(array, mapper, condition) {
+	if (!array) return [];
+	let mapped;
+	return array.reduce((acc, item, index) => {
+		if (condition) condition(item, index) && acc.push(mapper(item, index));
+		else if ((mapped = mapper(item, index)) != null) acc.push(mapped);
+		return acc;
+	}, []);
+}
+function sift(array) {
+	return (array == null ? void 0 : array.filter((x) => !!x)) ?? [];
+}
+function unique(array, toKey) {
+	if (toKey) {
+		const keys2 = /* @__PURE__ */ new Set();
+		return array.reduce((acc, item) => {
+			const key = toKey(item);
+			if (!keys2.has(key)) {
+				keys2.add(key);
+				acc.push(item);
+			}
+			return acc;
+		}, []);
+	}
+	return [...new Set(array)];
+}
+async function retry(options, func) {
+	const times = (options == null ? void 0 : options.times) ?? 3;
+	const delay = options == null ? void 0 : options.delay;
+	const backoff = (options == null ? void 0 : options.backoff) ?? null;
+	const signal = options == null ? void 0 : options.signal;
+	let i = 0;
+	while (true) {
+		const [err, result] = await tryit(func)((err2) => {
+			throw { _exited: err2 };
+		});
+		signal?.throwIfAborted();
+		if (!err) return result;
+		if (err._exited) throw err._exited;
+		if (++i >= times) throw err;
+		if (delay) await sleep(delay);
+		if (backoff) await sleep(backoff(i));
+	}
+}
+function sleep(milliseconds) {
+	return new Promise((res) => setTimeout(res, milliseconds));
+}
+function tryit(func) {
+	return (...args) => {
+		try {
+			const result = func(...args);
+			return isPromise(result) ? result.then((value) => [void 0, value], (err) => [err, void 0]) : [void 0, result];
+		} catch (err) {
+			return [err, void 0];
+		}
+	};
+}
+function shake(obj, filter = (value) => value === void 0) {
+	if (!obj) return {};
+	return Object.keys(obj).reduce((acc, key) => {
+		if (!filter(obj[key])) acc[key] = obj[key];
+		return acc;
+	}, {});
+}
+var AggregateErrorOrPolyfill = globalThis.AggregateError ?? class AggregateError extends Error {
+	constructor(errors = []) {
+		var _a, _b;
+		super();
+		this.name = `AggregateError(${((_a = errors.find((e) => e.name)) == null ? void 0 : _a.name) ?? ""}...)`;
+		this.message = `AggregateError with ${errors.length} errors`;
+		this.stack = ((_b = errors.find((e) => e.stack)) == null ? void 0 : _b.stack) ?? this.stack;
+		this.errors = errors;
+	}
+};
+var htmlCharacters = /[&<>"']/g;
+var replacements = {
+	"&": "&amp;",
+	"<": "&lt;",
+	">": "&gt;",
+	"\"": "&quot;",
+	"'": "&#39;"
+};
+function escapeHTML(input) {
+	return input.replace(htmlCharacters, (char) => replacements[char]);
+}
+var isArray = Array.isArray;
+function isFunction(value) {
+	return typeof value === "function";
+}
+var isInt = Number.isInteger;
+function isPromise(value) {
+	return !!value && isFunction(value.then);
+}
+
+//#endregion
 //#region node_modules/zod/v4/core/core.js
 /** A special constant with type `never` */
 const NEVER = Object.freeze({ status: "aborted" });
@@ -24369,100 +24475,6 @@ g.parse = g;
 var Ut = g.options, Kt = g.setOptions, Wt = g.use, Xt = g.walkTokens, Jt = g.parseInline, Vt = g, Yt = b.parse, en = x.lex;
 
 //#endregion
-//#region node_modules/radashi/dist/radashi.js
-function diff(root, other, identity2 = (t) => t) {
-	if (!(root == null ? void 0 : root.length) && !(other == null ? void 0 : other.length)) return [];
-	if ((root == null ? void 0 : root.length) === void 0) return [...other];
-	if (!(other == null ? void 0 : other.length)) return [...root];
-	const bKeys = other.reduce((acc, item) => {
-		acc[identity2(item)] = true;
-		return acc;
-	}, {});
-	return root.filter((a) => !bKeys[identity2(a)]);
-}
-function unique(array, toKey) {
-	if (toKey) {
-		const keys2 = /* @__PURE__ */ new Set();
-		return array.reduce((acc, item) => {
-			const key = toKey(item);
-			if (!keys2.has(key)) {
-				keys2.add(key);
-				acc.push(item);
-			}
-			return acc;
-		}, []);
-	}
-	return [...new Set(array)];
-}
-async function retry(options, func) {
-	const times = (options == null ? void 0 : options.times) ?? 3;
-	const delay = options == null ? void 0 : options.delay;
-	const backoff = (options == null ? void 0 : options.backoff) ?? null;
-	const signal = options == null ? void 0 : options.signal;
-	let i = 0;
-	while (true) {
-		const [err, result] = await tryit(func)((err2) => {
-			throw { _exited: err2 };
-		});
-		signal?.throwIfAborted();
-		if (!err) return result;
-		if (err._exited) throw err._exited;
-		if (++i >= times) throw err;
-		if (delay) await sleep(delay);
-		if (backoff) await sleep(backoff(i));
-	}
-}
-function sleep(milliseconds) {
-	return new Promise((res) => setTimeout(res, milliseconds));
-}
-function tryit(func) {
-	return (...args) => {
-		try {
-			const result = func(...args);
-			return isPromise(result) ? result.then((value) => [void 0, value], (err) => [err, void 0]) : [void 0, result];
-		} catch (err) {
-			return [err, void 0];
-		}
-	};
-}
-function shake(obj, filter = (value) => value === void 0) {
-	if (!obj) return {};
-	return Object.keys(obj).reduce((acc, key) => {
-		if (!filter(obj[key])) acc[key] = obj[key];
-		return acc;
-	}, {});
-}
-var AggregateErrorOrPolyfill = globalThis.AggregateError ?? class AggregateError extends Error {
-	constructor(errors = []) {
-		var _a, _b;
-		super();
-		this.name = `AggregateError(${((_a = errors.find((e) => e.name)) == null ? void 0 : _a.name) ?? ""}...)`;
-		this.message = `AggregateError with ${errors.length} errors`;
-		this.stack = ((_b = errors.find((e) => e.stack)) == null ? void 0 : _b.stack) ?? this.stack;
-		this.errors = errors;
-	}
-};
-var htmlCharacters = /[&<>"']/g;
-var replacements = {
-	"&": "&amp;",
-	"<": "&lt;",
-	">": "&gt;",
-	"\"": "&quot;",
-	"'": "&#39;"
-};
-function escapeHTML(input) {
-	return input.replace(htmlCharacters, (char) => replacements[char]);
-}
-var isArray = Array.isArray;
-function isFunction(value) {
-	return typeof value === "function";
-}
-var isInt = Number.isInteger;
-function isPromise(value) {
-	return !!value && isFunction(value.then);
-}
-
-//#endregion
 //#region src/sdk/beacon-markdown.ts
 const markdownStartTag = (id) => `<!--markdown-${id}-->`;
 const markdownEndTag = (id) => `<!--markdown-${id}-end-->`;
@@ -25013,23 +25025,15 @@ const unpackRow = (row) => {
 		markdownToHtml: true
 	}];
 };
-const isEmptyRow = (row) => {
-	if (typeof row === "string") return row.trim().length === 0;
-	return row.message.trim().length === 0;
-};
-/** Apply rows coming from the structured JSON payload. */
+const isEmptyEntry = (entry) => typeof entry === "string" ? entry.trim().length === 0 : entry.message.trim().length === 0;
+const getEntryId = (entry) => typeof entry === "string" ? void 0 : entry.id;
 const applyJsonPayload = (prBeacon, jsonPayload) => {
-	for (const row of jsonPayload.fails ?? []) if (!isEmptyRow(row)) prBeacon.fail(...unpackRow(row));
-	for (const row of jsonPayload.warnings ?? []) if (!isEmptyRow(row)) prBeacon.warn(...unpackRow(row));
-	for (const row of jsonPayload.messages ?? []) if (!isEmptyRow(row)) prBeacon.message(...unpackRow(row));
-	for (const entry of jsonPayload.markdowns ?? []) if (typeof entry === "string") {
-		if (entry.trim().length > 0) prBeacon.markdown(entry);
-	} else {
-		const { id, message } = entry;
-		if (message.trim().length > 0) prBeacon.markdown(message, { id });
-	}
+	for (const row of jsonPayload.fails ?? []) if (!isEmptyEntry(row)) prBeacon.fail(...unpackRow(row));
+	for (const row of jsonPayload.warnings ?? []) if (!isEmptyEntry(row)) prBeacon.warn(...unpackRow(row));
+	for (const row of jsonPayload.messages ?? []) if (!isEmptyEntry(row)) prBeacon.message(...unpackRow(row));
+	for (const entry of jsonPayload.markdowns ?? []) if (!isEmptyEntry(entry)) if (typeof entry === "string") prBeacon.markdown(entry);
+	else prBeacon.markdown(entry.message, { id: entry.id });
 };
-/** Apply plain-string rows coming from individual action inputs. */
 const applyIndividualInputs = (prBeacon, inputs) => {
 	const { failInput, failIcon, failId, markdownInput, markdownId, warnInput, warnIcon, warnId, messageInput, messageIcon, messageId } = inputs;
 	if (failInput !== void 0) prBeacon.fail(failInput, {
@@ -25048,6 +25052,28 @@ const applyIndividualInputs = (prBeacon, inputs) => {
 		markdownToHtml: true
 	});
 	if (markdownInput !== void 0) prBeacon.markdown(markdownInput, { id: markdownId });
+};
+/**
+* Collect IDs from inputs/payload entries that have an ID but no message content.
+* These "orphan" IDs must still be added to contentIdsToUpdate so that old rows
+* with those IDs are removed from the beacon.
+*/
+const collectOrphanIds = (inputs, jsonPayload) => {
+	const ids = [];
+	if (inputs.failInput === void 0 && inputs.failId !== void 0) ids.push(inputs.failId);
+	if (inputs.warnInput === void 0 && inputs.warnId !== void 0) ids.push(inputs.warnId);
+	if (inputs.messageInput === void 0 && inputs.messageId !== void 0) ids.push(inputs.messageId);
+	if (inputs.markdownInput === void 0 && inputs.markdownId !== void 0) ids.push(inputs.markdownId);
+	if (jsonPayload !== void 0) {
+		const arrays = [
+			jsonPayload.fails,
+			jsonPayload.warnings,
+			jsonPayload.messages,
+			jsonPayload.markdowns
+		];
+		for (const array of arrays) if (array !== void 0) ids.push(...sift(select(array, getEntryId, isEmptyEntry)));
+	}
+	return ids;
 };
 try {
 	process$1.env.GITHUB_TOKEN = getInput("token", { required: true });
@@ -25073,23 +25099,26 @@ try {
 	const replaceModeRaw = optionalInput("replace-mode");
 	const replaceMode = replaceModeRaw === "in-place" || replaceModeRaw === "append" ? replaceModeRaw : void 0;
 	const contentIdsToUpdate = contentIdsToUpdateRaw === void 0 || contentIdsToUpdateRaw === "" ? void 0 : contentIdsToUpdateRaw.split(",").map((entry) => entry.trim()).filter(Boolean);
-	const resolvedContentIdsToUpdate = jsonPayload?.options?.contentIdsToUpdate ?? contentIdsToUpdate;
 	const resolvedReplaceMode = jsonPayload?.options?.replaceMode ?? replaceMode;
+	const individualInputs = {
+		failIcon,
+		failId,
+		failInput,
+		markdownId,
+		markdownInput,
+		messageIcon,
+		messageId,
+		messageInput,
+		warnIcon,
+		warnId,
+		warnInput
+	};
+	const orphanIds = collectOrphanIds(individualInputs, jsonPayload);
+	const baseContentIds = jsonPayload?.options?.contentIdsToUpdate ?? contentIdsToUpdate;
+	const resolvedContentIdsToUpdate = orphanIds.length > 0 ? [...baseContentIds ?? [], ...orphanIds] : baseContentIds;
 	const buildBeaconCallback = (prBeacon) => {
 		if (jsonPayload !== void 0) applyJsonPayload(prBeacon, jsonPayload);
-		applyIndividualInputs(prBeacon, {
-			failIcon,
-			failId,
-			failInput,
-			markdownId,
-			markdownInput,
-			messageIcon,
-			messageId,
-			messageInput,
-			warnIcon,
-			warnId,
-			warnInput
-		});
+		applyIndividualInputs(prBeacon, individualInputs);
 	};
 	await submitPrBeacon(buildBeaconCallback, {
 		contentIdsToUpdate: resolvedContentIdsToUpdate,
