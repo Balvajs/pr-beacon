@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import process from 'node:process';
 
 import { getInput, setFailed } from '@actions/core';
+import { select, sift } from 'radashi';
 import { z } from 'zod';
 
 import { submitPrBeacon } from '../sdk/index.ts';
@@ -65,42 +66,38 @@ const unpackRow = (
   return [message, { ...meta, markdownToHtml: true }];
 };
 
-const isEmptyRow = (row: z.infer<typeof tableRowSchema>): boolean => {
-  if (typeof row === 'string') {
-    return row.trim().length === 0;
-  }
+type EntryWithMessage = string | { message: string; id?: string };
 
-  return row.message.trim().length === 0;
-};
+const isEmptyEntry = (entry: EntryWithMessage): boolean =>
+  typeof entry === 'string' ? entry.trim().length === 0 : entry.message.trim().length === 0;
+
+const getEntryId = (entry: EntryWithMessage): string | undefined =>
+  typeof entry === 'string' ? undefined : entry.id;
 
 type PrBeaconArg = Parameters<Parameters<typeof submitPrBeacon>[0]>[0];
 
-/** Apply rows coming from the structured JSON payload. */
 const applyJsonPayload = (prBeacon: PrBeaconArg, jsonPayload: JsonPayload): void => {
   for (const row of jsonPayload.fails ?? []) {
-    if (!isEmptyRow(row)) {
+    if (!isEmptyEntry(row)) {
       prBeacon.fail(...unpackRow(row));
     }
   }
   for (const row of jsonPayload.warnings ?? []) {
-    if (!isEmptyRow(row)) {
+    if (!isEmptyEntry(row)) {
       prBeacon.warn(...unpackRow(row));
     }
   }
   for (const row of jsonPayload.messages ?? []) {
-    if (!isEmptyRow(row)) {
+    if (!isEmptyEntry(row)) {
       prBeacon.message(...unpackRow(row));
     }
   }
   for (const entry of jsonPayload.markdowns ?? []) {
-    if (typeof entry === 'string') {
-      if (entry.trim().length > 0) {
+    if (!isEmptyEntry(entry)) {
+      if (typeof entry === 'string') {
         prBeacon.markdown(entry);
-      }
-    } else {
-      const { id, message } = entry;
-      if (message.trim().length > 0) {
-        prBeacon.markdown(message, { id });
+      } else {
+        prBeacon.markdown(entry.message, { id: entry.id });
       }
     }
   }
@@ -120,7 +117,6 @@ type IndividualInputs = {
   warnId: string | undefined;
 };
 
-/** Apply plain-string rows coming from individual action inputs. */
 const applyIndividualInputs = (prBeacon: PrBeaconArg, inputs: IndividualInputs): void => {
   const {
     failInput,
@@ -148,6 +144,47 @@ const applyIndividualInputs = (prBeacon: PrBeaconArg, inputs: IndividualInputs):
   if (markdownInput !== undefined) {
     prBeacon.markdown(markdownInput, { id: markdownId });
   }
+};
+
+/**
+ * Collect IDs from inputs/payload entries that have an ID but no message content.
+ * These "orphan" IDs must still be added to contentIdsToUpdate so that old rows
+ * with those IDs are removed from the beacon.
+ */
+const collectOrphanIds = (
+  inputs: IndividualInputs,
+  jsonPayload: JsonPayload | undefined,
+): string[] => {
+  const ids: string[] = [];
+
+  if (inputs.failInput === undefined && inputs.failId !== undefined) {
+    ids.push(inputs.failId);
+  }
+  if (inputs.warnInput === undefined && inputs.warnId !== undefined) {
+    ids.push(inputs.warnId);
+  }
+  if (inputs.messageInput === undefined && inputs.messageId !== undefined) {
+    ids.push(inputs.messageId);
+  }
+  if (inputs.markdownInput === undefined && inputs.markdownId !== undefined) {
+    ids.push(inputs.markdownId);
+  }
+
+  if (jsonPayload !== undefined) {
+    const arrays: (EntryWithMessage[] | undefined)[] = [
+      jsonPayload.fails,
+      jsonPayload.warnings,
+      jsonPayload.messages,
+      jsonPayload.markdowns,
+    ];
+    for (const array of arrays) {
+      if (array !== undefined) {
+        ids.push(...sift(select(array, getEntryId, isEmptyEntry)));
+      }
+    }
+  }
+
+  return ids;
 };
 
 // ---------------------------------------------------------------------------
@@ -197,27 +234,35 @@ try {
           .filter(Boolean);
 
   // -- Merge submit options (JSON payload options take precedence) -----------
-  const resolvedContentIdsToUpdate = jsonPayload?.options?.contentIdsToUpdate ?? contentIdsToUpdate;
   const resolvedReplaceMode = jsonPayload?.options?.replaceMode ?? replaceMode;
+
+  const individualInputs: IndividualInputs = {
+    failIcon,
+    failId,
+    failInput,
+    markdownId,
+    markdownInput,
+    messageIcon,
+    messageId,
+    messageInput,
+    warnIcon,
+    warnId,
+    warnInput,
+  };
+
+  // Collect IDs from inputs that have an ID but no message — these still need
+  // To clear old rows with that ID from the beacon.
+  const orphanIds = collectOrphanIds(individualInputs, jsonPayload);
+  const baseContentIds = jsonPayload?.options?.contentIdsToUpdate ?? contentIdsToUpdate;
+  const resolvedContentIdsToUpdate =
+    orphanIds.length > 0 ? [...(baseContentIds ?? []), ...orphanIds] : baseContentIds;
 
   // -- Build and submit the beacon -------------------------------------------
   const buildBeaconCallback: Parameters<typeof submitPrBeacon>[0] = (prBeacon) => {
     if (jsonPayload !== undefined) {
       applyJsonPayload(prBeacon, jsonPayload);
     }
-    applyIndividualInputs(prBeacon, {
-      failIcon,
-      failId,
-      failInput,
-      markdownId,
-      markdownInput,
-      messageIcon,
-      messageId,
-      messageInput,
-      warnIcon,
-      warnId,
-      warnInput,
-    });
+    applyIndividualInputs(prBeacon, individualInputs);
   };
 
   await submitPrBeacon(buildBeaconCallback, {
