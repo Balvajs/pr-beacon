@@ -300,6 +300,225 @@ describe('action – content-ids-to-update input', () => {
   });
 });
 
+describe('action – orphan IDs (ID provided without message)', () => {
+  it('adds fail-id to contentIdsToUpdate when fail message is empty', async () => {
+    mockGetInput.mockImplementation((name: string) => {
+      if (name === 'token') {
+        return 'tok';
+      }
+      if (name === 'fail-id') {
+        return 'my-fail-id';
+      }
+      return '';
+    });
+
+    await loadAndRunAction();
+
+    expect(mockSubmitPrBeacon).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        contentIdsToUpdate: ['my-fail-id'],
+      }),
+    );
+  });
+
+  it('adds warn-id to contentIdsToUpdate when warn message is empty', async () => {
+    mockGetInput.mockImplementation((name: string) => {
+      if (name === 'token') {
+        return 'tok';
+      }
+      if (name === 'warn-id') {
+        return 'my-warn-id';
+      }
+      return '';
+    });
+
+    await loadAndRunAction();
+
+    expect(mockSubmitPrBeacon).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        contentIdsToUpdate: ['my-warn-id'],
+      }),
+    );
+  });
+
+  it('adds message-id to contentIdsToUpdate when message is empty', async () => {
+    mockGetInput.mockImplementation((name: string) => {
+      if (name === 'token') {
+        return 'tok';
+      }
+      if (name === 'message-id') {
+        return 'my-msg-id';
+      }
+      return '';
+    });
+
+    await loadAndRunAction();
+
+    expect(mockSubmitPrBeacon).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        contentIdsToUpdate: ['my-msg-id'],
+      }),
+    );
+  });
+
+  it('adds markdown-id to contentIdsToUpdate when markdown is empty', async () => {
+    mockGetInput.mockImplementation((name: string) => {
+      if (name === 'token') {
+        return 'tok';
+      }
+      if (name === 'markdown-id') {
+        return 'my-md-id';
+      }
+      return '';
+    });
+
+    await loadAndRunAction();
+
+    expect(mockSubmitPrBeacon).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        contentIdsToUpdate: ['my-md-id'],
+      }),
+    );
+  });
+
+  it('merges orphan IDs with explicit content-ids-to-update', async () => {
+    mockGetInput.mockImplementation((name: string) => {
+      if (name === 'token') {
+        return 'tok';
+      }
+      if (name === 'fail-id') {
+        return 'orphan-id';
+      }
+      if (name === 'content-ids-to-update') {
+        return 'explicit-id';
+      }
+      return '';
+    });
+
+    await loadAndRunAction();
+
+    expect(mockSubmitPrBeacon).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        contentIdsToUpdate: ['explicit-id', 'orphan-id'],
+      }),
+    );
+  });
+
+  it('does not add orphan IDs when message is provided (not orphaned)', async () => {
+    mockGetInput.mockImplementation((name: string) => {
+      if (name === 'token') {
+        return 'tok';
+      }
+      if (name === 'fail') {
+        return 'actual error';
+      }
+      if (name === 'fail-id') {
+        return 'my-fail-id';
+      }
+      return '';
+    });
+
+    await loadAndRunAction();
+
+    // ContentIdsToUpdate should be undefined (default behavior, no orphans)
+    expect(mockSubmitPrBeacon).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        contentIdsToUpdate: undefined,
+      }),
+    );
+  });
+
+  it('collects orphan IDs from JSON payload empty rows with IDs', async () => {
+    mockGetInput.mockImplementation((name: string) => {
+      if (name === 'token') {
+        return 'tok';
+      }
+      if (name === 'json-file') {
+        return '/tmp/payload.json';
+      }
+      return '';
+    });
+    mockReadFileSync.mockReturnValue(
+      JSON.stringify({
+        fails: [{ id: 'json-orphan', message: '' }],
+      }),
+    );
+
+    await loadAndRunAction();
+
+    expect(mockSubmitPrBeacon).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        contentIdsToUpdate: ['json-orphan'],
+      }),
+    );
+  });
+
+  it('collects orphan IDs from all JSON payload array types', async () => {
+    mockGetInput.mockImplementation((name: string) => {
+      if (name === 'token') {
+        return 'tok';
+      }
+      if (name === 'json-file') {
+        return '/tmp/payload.json';
+      }
+      return '';
+    });
+    mockReadFileSync.mockReturnValue(
+      JSON.stringify({
+        fails: [{ id: 'orphan-fail', message: '' }],
+        markdowns: [{ id: 'orphan-md', message: '   ' }],
+        messages: [{ id: 'orphan-msg', message: '' }],
+        warnings: [{ id: 'orphan-warn', message: '' }],
+      }),
+    );
+
+    await loadAndRunAction();
+
+    expect(mockSubmitPrBeacon).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        contentIdsToUpdate: expect.arrayContaining([
+          'orphan-fail',
+          'orphan-warn',
+          'orphan-msg',
+          'orphan-md',
+        ]),
+      }),
+    );
+  });
+
+  it('collects multiple orphan IDs from individual inputs in one run', async () => {
+    mockGetInput.mockImplementation((name: string) => {
+      if (name === 'token') {
+        return 'tok';
+      }
+      if (name === 'fail-id') {
+        return 'orphan-fail';
+      }
+      if (name === 'warn-id') {
+        return 'orphan-warn';
+      }
+      return '';
+    });
+
+    await loadAndRunAction();
+
+    expect(mockSubmitPrBeacon).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        contentIdsToUpdate: ['orphan-fail', 'orphan-warn'],
+      }),
+    );
+  });
+});
+
 describe('action – fail-on-fail-message input', () => {
   it('passes shouldFailOnFailMessage=true when input is "true"', async () => {
     mockGetInput.mockImplementation((name: string) => {
