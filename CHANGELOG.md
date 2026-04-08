@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.3](https://github.com/Balvajs/pr-beacon/compare/v1.2.2...v1.2.3) (2026-04-08)
+
+
+### Bug Fixes
+
+* clear existing messages when ID is provided without content ([#22](https://github.com/Balvajs/pr-beacon/issues/22)) ([6a36f10](https://github.com/Balvajs/pr-beacon/commit/6a36f10ae766168f9ca25d08340b82501eca685d))
+
 ## [1.2.2](https://github.com/Balvajs/pr-beacon/compare/v1.2.1...v1.2.2) (2026-03-23)
 
 
