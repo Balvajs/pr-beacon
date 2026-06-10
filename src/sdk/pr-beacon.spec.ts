@@ -1,4 +1,4 @@
-import { setFailed } from '@actions/core';
+import { info, setFailed } from '@actions/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { commentPr } from './comment-pr.ts';
@@ -21,7 +21,10 @@ vi.mock('picocolors', () => ({
   },
 }));
 
-const { mockCommentPr } = vi.hoisted(() => ({ mockCommentPr: vi.fn() }));
+const { mockCommentPr, octokitRequestMocks } = vi.hoisted(() => ({
+  mockCommentPr: vi.fn(),
+  octokitRequestMocks: [] as ReturnType<typeof vi.fn>[],
+}));
 vi.mock('./comment-pr.ts', () => ({
   commentPr: mockCommentPr,
 }));
@@ -36,10 +39,14 @@ vi.mock('@actions/github', () => ({
 }));
 
 vi.mock('./get-octokit.ts', () => ({
-  getOctokit: vi.fn(() => ({
-    paginate: vi.fn().mockResolvedValue([]),
-    request: vi.fn().mockResolvedValue({ data: {} }),
-  })),
+  getOctokit: vi.fn(() => {
+    const request = vi.fn().mockResolvedValue({ data: {} });
+    octokitRequestMocks.push(request);
+    return {
+      paginate: vi.fn().mockResolvedValue([]),
+      request,
+    };
+  }),
   getPrContext: vi.fn(() => ({
     issue_number: 1,
     owner: 'owner',
@@ -158,6 +165,43 @@ describe('PrBeacon accumulation', () => {
   });
 });
 
+describe('PrBeacon row logging', () => {
+  it('logs a fail row once at accumulation time', () => {
+    const beacon = new PrBeacon({ githubToken: defaultToken });
+    beacon.fail('broken thing');
+
+    expect(info).toHaveBeenCalledTimes(1);
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('🚫 FAIL'));
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('broken thing'));
+  });
+
+  it('logs a warning row with the warning prefix', () => {
+    const beacon = new PrBeacon({ githubToken: defaultToken });
+    beacon.warn('suspicious thing');
+
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('⚠️ WARNING'));
+  });
+
+  it('logs a message row with its custom icon', () => {
+    const beacon = new PrBeacon({ githubToken: defaultToken });
+    beacon.message('plain info', { icon: '✅' });
+
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('✅ plain info'));
+  });
+
+  it('does not log again when the beacon body is rendered repeatedly', async () => {
+    const beacon = new PrBeacon({ githubToken: defaultToken });
+    beacon.fail('broken thing');
+    vi.mocked(info).mockClear();
+
+    await beacon._submit();
+    getRenderedBody();
+    getRenderedBody();
+
+    expect(info).not.toHaveBeenCalled();
+  });
+});
+
 describe('PrBeacon markdownToHtml option', () => {
   it('converts markdown to HTML when markdownToHtml=true', async () => {
     const beacon = new PrBeacon({ githubToken: defaultToken });
@@ -176,6 +220,29 @@ describe('PrBeacon markdownToHtml option', () => {
     await beacon._submit({ contentIdsToUpdate: ['my-workflow/my-job'] });
 
     expect(getRenderedBody()).toContain('**raw text**');
+  });
+});
+
+describe('PrBeacon.getPrInfo', () => {
+  it('fetches PR info once and serves repeated calls from the instance cache', async () => {
+    const beacon = new PrBeacon({ githubToken: defaultToken });
+    const requestMock = octokitRequestMocks.at(-1);
+
+    await beacon.getPrInfo();
+    await beacon.getPrInfo();
+
+    expect(requestMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not share the cache between instances', async () => {
+    const firstBeacon = new PrBeacon({ githubToken: defaultToken });
+    await firstBeacon.getPrInfo();
+
+    const secondBeacon = new PrBeacon({ githubToken: defaultToken });
+    const secondRequestMock = octokitRequestMocks.at(-1);
+    await secondBeacon.getPrInfo();
+
+    expect(secondRequestMock).toHaveBeenCalledTimes(1);
   });
 });
 
