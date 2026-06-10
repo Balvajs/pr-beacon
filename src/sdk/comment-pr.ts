@@ -10,6 +10,7 @@ const MAX_RETRIES = 5;
 const RETRY_DELAY_MS = 500;
 const JITTER_MIN_FACTOR = 0.5;
 const WRITE_NONCE_PATTERN = /\n<!--write-nonce:[a-f0-9-]+-->/g;
+const GITHUB_COMMENT_BODY_LIMIT = 65_536;
 
 type PrComment =
   PaginatingEndpoints['GET /repos/{owner}/{repo}/issues/{issue_number}/comments']['response']['data'][0];
@@ -43,6 +44,10 @@ const findBeaconComment = async (
  * verification read, another job overwrote us and we retry up to MAX_RETRIES times,
  * re-fetching the latest body each time to reduce the chance of lost updates under concurrent writers.
  * Retry delays are jittered to desynchronize concurrent jobs.
+ *
+ * When all attempts fail the returned action is `'failed'` (with an empty `commentBody`)
+ * and a warning is logged — the error is not thrown, so the caller decides whether
+ * a lost comment update should break the build.
  */
 export const commentPr = async ({
   githubToken,
@@ -63,7 +68,7 @@ export const commentPr = async ({
    * Used for identification of comment when being removed or replaced
    */
   commentId: string;
-}): Promise<{ action: 'upsert' | 'create'; commentBody: string }> => {
+}): Promise<{ action: 'upsert' | 'create' | 'failed'; commentBody: string }> => {
   const octokit = getOctokit({ token: githubToken });
   const prContext = getPrContext();
 
@@ -85,6 +90,12 @@ export const commentPr = async ({
       const bodyContent = typeof markdown === 'string' ? markdown : markdown(previousBody);
       const nonce = `<!--write-nonce:${randomUUID()}-->`;
       const body = `${bodyContent}\n${nonce}\n${commentFooter}`;
+
+      if (body.length > GITHUB_COMMENT_BODY_LIMIT) {
+        throw new Error(
+          `Comment body length ${body.length} exceeds the GitHub limit of ${GITHUB_COMMENT_BODY_LIMIT} characters.`,
+        );
+      }
 
       if (existingComment === undefined) {
         await octokit.request('POST /repos/{owner}/{repo}/issues/{issue_number}/comments', {
@@ -113,10 +124,11 @@ export const commentPr = async ({
 
       throw new Error('Write was clobbered by a concurrent update.');
     },
-  ).catch(() => {
-    // Fail silently if we can't update the comment after max attempts, to avoid breaking the build
-    warning(`Failed to update PR comment after ${MAX_RETRIES} attempts due to concurrent updates.`);
+  ).catch((error: unknown) => {
+    // Don't throw, to avoid breaking the build — the result reports the failure instead
+    const reason = error instanceof Error ? error.message : String(error);
+    warning(`Failed to update PR comment after ${MAX_RETRIES} attempts: ${reason}`);
 
-    return { action: 'upsert' as const, commentBody: '' };
+    return { action: 'failed' as const, commentBody: '' };
   });
 };

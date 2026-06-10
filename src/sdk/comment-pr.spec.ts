@@ -167,14 +167,32 @@ describe('commentPr – retry on concurrent update', () => {
       .mockResolvedValueOnce({ data: { body: 'CLOBBERED', id: 5 } });
 
     // Retry wrapper from radashi is mocked to only run once —
-    // After exhausting all attempts the implementation swallows the error and resolves silently.
+    // After exhausting all attempts the failure is reported in the result instead of thrown.
     const result = await commentPr({
       commentId: 'PR-BEACON',
       githubToken: 'tok',
       markdown: 'My update',
     });
 
-    expect(result).toEqual({ action: 'upsert', commentBody: '' });
+    expect(result).toEqual({ action: 'failed', commentBody: '' });
+  });
+});
+
+const GITHUB_COMMENT_BODY_LIMIT = 65_536;
+
+describe('commentPr – body size limit', () => {
+  it('reports failure when the body exceeds the GitHub comment limit', async () => {
+    mockPaginateIterator.mockReturnValue(makeAsyncIterator([{ data: [] }]));
+
+    const result = await commentPr({
+      commentId: 'PR-BEACON',
+      githubToken: 'tok',
+      markdown: 'x'.repeat(GITHUB_COMMENT_BODY_LIMIT + 1),
+    });
+
+    expect(result).toEqual({ action: 'failed', commentBody: '' });
+    // No write request should have been attempted
+    expect(mockRequest).not.toHaveBeenCalled();
   });
 });
 
