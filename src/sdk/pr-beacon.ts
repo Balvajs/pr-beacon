@@ -1,23 +1,24 @@
 import process from 'node:process';
 
-import { setFailed } from '@actions/core';
+import { info, setFailed } from '@actions/core';
 import { context as githubContext } from '@actions/github';
 import type { operations } from '@octokit/openapi-types';
 import { marked } from 'marked';
+import picocolors from 'picocolors';
 import { shake } from 'radashi';
 
-import { updateMarkdowns } from './beacon-markdown.ts';
-import { emptyTablesTemplate, updateTables } from './beacon-table.ts';
-import type { ReplaceMode, TableRowMessage, TableType } from './beacon-table.ts';
+import { renderBeacon } from './beacon-document.ts';
+import type {
+  MarkdownMessage,
+  ReplaceMode,
+  TableRowMessage,
+  TableType,
+} from './beacon-document.ts';
 import { commentPr } from './comment-pr.ts';
 import { getOctokit, getPrContext } from './get-octokit.ts';
 
-const prContext = getPrContext();
-
 type PrInfo = Awaited<ReturnType<PrBeacon['_fetchPrInfo']>>['data'];
 type Octokit = ReturnType<typeof getOctokit>;
-
-let prInfoCache: undefined | PrInfo;
 
 /**
  * Default content ID derived from the current workflow and job names.
@@ -32,6 +33,28 @@ const convertMarkdownToHtml = (message: string): string =>
     breaks: true,
     gfm: true,
   });
+
+type TableRowOptions = Omit<TableRowMessage, 'message'> & {
+  id?: string;
+  markdownToHtml?: boolean;
+};
+
+/**
+ * Loggers keyed by table type, called at accumulation time so each row is
+ * logged exactly once regardless of how many times the beacon body is
+ * re-rendered (e.g. on concurrent-write retries).
+ */
+const rowLoggers: Record<TableType, (message: string, icon: string | undefined) => void> = {
+  fails: (message) => {
+    info(picocolors.red(`${picocolors.bold('🚫 FAIL')}: ${message}\n\n`));
+  },
+  messages: (message, icon) => {
+    info(`${icon ?? '📖'} ${message}\n\n`);
+  },
+  warnings: (message) => {
+    info(picocolors.yellow(`${picocolors.bold('⚠️ WARNING')}: ${message}\n\n`));
+  },
+};
 
 /**
  * PR beacon is sticky comment in PR, that has 2 main sections: tables and markdowns
@@ -54,10 +77,12 @@ export class PrBeacon {
     warnings: [],
   };
 
-  private readonly markdowns: { message: string; id: string }[] = [];
+  private readonly markdowns: MarkdownMessage[] = [];
 
   private readonly githubToken: string;
   private readonly octokit: Octokit;
+  private readonly prContext = getPrContext();
+  private prInfoCache: PrInfo | undefined;
 
   constructor({
     githubToken,
@@ -83,15 +108,15 @@ export class PrBeacon {
 
   // oxlint-disable-next-line typescript/explicit-function-return-type
   private readonly _fetchPrInfo = async () =>
-    this.octokit.request('GET /repos/{owner}/{repo}/pulls/{pull_number}', prContext);
+    this.octokit.request('GET /repos/{owner}/{repo}/pulls/{pull_number}', this.prContext);
 
   getPrInfo = async (): Promise<PrInfo> => {
-    if (!prInfoCache) {
+    if (!this.prInfoCache) {
       const result = await this._fetchPrInfo();
-      prInfoCache = result.data;
+      this.prInfoCache = result.data;
     }
 
-    return prInfoCache;
+    return this.prInfoCache;
   };
 
   /**
@@ -101,68 +126,43 @@ export class PrBeacon {
     operations['pulls/list-files']['responses']['200']['content']['application/json']
   > =>
     this.octokit.paginate('GET /repos/{owner}/{repo}/pulls/{pull_number}/files', {
-      ...prContext,
+      ...this.prContext,
       per_page: 100,
     });
 
-  /**
-   * Add fail message to the `Fails` beacon section
-   */
-  fail(
+  private addTableRow(
+    tableType: TableType,
     message: string,
-    {
-      markdownToHtml,
-      ...meta
-    }: Omit<TableRowMessage, 'message'> & {
-      id?: string;
-      markdownToHtml?: boolean;
-    } = {},
+    { markdownToHtml, ...meta }: TableRowOptions,
   ): void {
-    this.tables.fails.push({
+    rowLoggers[tableType](message, meta.icon);
+
+    this.tables[tableType].push({
       id: getDefaultContentId(),
       message: markdownToHtml === true ? convertMarkdownToHtml(message) : message,
       ...shake(meta, (value) => value === undefined || value === ''),
     });
+  }
+
+  /**
+   * Add fail message to the `Fails` beacon section
+   */
+  fail(message: string, options: TableRowOptions = {}): void {
+    this.addTableRow('fails', message, options);
   }
 
   /**
    * Add warning message to the `Warnings` table in the PR beacon
    */
-  warn(
-    message: string,
-    {
-      markdownToHtml,
-      ...meta
-    }: Omit<TableRowMessage, 'message'> & {
-      id?: string;
-      markdownToHtml?: boolean;
-    } = {},
-  ): void {
-    this.tables.warnings.push({
-      id: getDefaultContentId(),
-      message: markdownToHtml === true ? convertMarkdownToHtml(message) : message,
-      ...shake(meta, (value) => value === undefined || value === ''),
-    });
+  warn(message: string, options: TableRowOptions = {}): void {
+    this.addTableRow('warnings', message, options);
   }
 
   /**
    * Add message to the `Messages` table in the PR beacon
    */
-  message(
-    message: string,
-    {
-      markdownToHtml,
-      ...meta
-    }: Omit<TableRowMessage, 'message'> & {
-      id?: string;
-      markdownToHtml?: boolean;
-    } = {},
-  ): void {
-    this.tables.messages.push({
-      id: getDefaultContentId(),
-      message: markdownToHtml === true ? convertMarkdownToHtml(message) : message,
-      ...shake(meta, (value) => value === undefined || value === ''),
-    });
+  message(message: string, options: TableRowOptions = {}): void {
+    this.addTableRow('messages', message, options);
   }
 
   /**
@@ -176,19 +176,16 @@ export class PrBeacon {
     });
   }
 
-  private static readonly _updateFooter = ({ oldBeacon }: { oldBeacon: string }): string => {
-    let newBeacon = oldBeacon.replaceAll(/<p align="right"><sub>Generated .*?<\/sub><\/p>/gm, '');
-
+  private static _buildFooter(): string {
     const humanReadableTime = new Date().toLocaleString('cs-CZ', {
       timeZone: 'Europe/Prague',
       timeZoneName: 'shortOffset',
     });
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion
     const headSha = (githubContext.payload.pull_request?.head as { sha: string } | undefined)?.sha;
-    newBeacon += `<p align="right"><sub>Generated <code>${humanReadableTime}</code> for ${headSha}</sub></p>`;
 
-    return newBeacon;
-  };
+    return `Generated <code>${humanReadableTime}</code> for ${headSha}`;
+  }
 
   /**
    * Returns true if `prBeacon.fail()` was called before
@@ -226,26 +223,15 @@ export class PrBeacon {
   ): Promise<ReturnType<typeof commentPr>> {
     const { contentIdsToUpdate = [getDefaultContentId()], replaceMode } = options;
 
-    const updateReport = (oldBeacon: string | undefined): string => {
-      let newBeacon = oldBeacon ?? emptyTablesTemplate;
-
-      newBeacon = updateTables({
+    const updateReport = (oldBeacon: string | undefined): string =>
+      renderBeacon({
         contentIdsToUpdate,
+        footer: PrBeacon._buildFooter(),
+        newMarkdowns: this.markdowns,
         newTables: this.tables,
-        oldBeacon: newBeacon,
+        previousBody: oldBeacon,
         replaceMode,
       });
-
-      newBeacon = updateMarkdowns({
-        contentIdsToUpdate,
-        newMarkdowns: this.markdowns,
-        oldBeacon: newBeacon,
-      });
-
-      newBeacon = PrBeacon._updateFooter({ oldBeacon: newBeacon });
-
-      return newBeacon;
-    };
 
     const commentResult = await commentPr({
       commentId: 'PR-BEACON',

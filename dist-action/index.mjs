@@ -24475,36 +24475,6 @@ g.parse = g;
 var Ut = g.options, Kt = g.setOptions, Wt = g.use, Xt = g.walkTokens, Jt = g.parseInline, Vt = g, Yt = b.parse, en = x.lex;
 
 //#endregion
-//#region src/sdk/beacon-markdown.ts
-const markdownStartTag = (id) => `<!--markdown-${id}-->`;
-const markdownEndTag = (id) => `<!--markdown-${id}-end-->`;
-const escapeRegExp$1 = (value) => value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
-const markdownSectionRegexp = (id) => new RegExp(`${markdownStartTag(escapeRegExp$1(escapeHTML(id)))}[\\S\\s]*?${markdownEndTag(escapeRegExp$1(escapeHTML(id)))}`, "gm");
-const removeMarkdownsThatShouldBeUpdated = ({ oldBeacon, contentIdsToUpdate, newMarkdowns }) => {
-	let newBeacon = oldBeacon;
-	const markdownIdsToRemove = diff(contentIdsToUpdate, newMarkdowns.map(({ id }) => id));
-	for (const markdownIdToRemove of markdownIdsToRemove) newBeacon = newBeacon.replaceAll(markdownSectionRegexp(markdownIdToRemove), "");
-	return newBeacon;
-};
-/**
-* Go through all markdowns and update all of them with data from `newMarkdowns`
-*/
-const updateMarkdowns = ({ oldBeacon, contentIdsToUpdate, newMarkdowns }) => {
-	let newBeacon = oldBeacon;
-	newBeacon = removeMarkdownsThatShouldBeUpdated({
-		contentIdsToUpdate,
-		newMarkdowns,
-		oldBeacon
-	});
-	for (const { message, id } of newMarkdowns) {
-		const newMarkdown = `${markdownStartTag(id)}\n\n${message}\n${markdownEndTag(id)}`;
-		if (markdownSectionRegexp(id).test(newBeacon)) newBeacon = newBeacon.replace(markdownSectionRegexp(id), newMarkdown);
-		else newBeacon += newMarkdown;
-	}
-	return newBeacon;
-};
-
-//#endregion
 //#region node_modules/picocolors/picocolors.js
 var require_picocolors = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	let p = process || {}, argv = p.argv || [], env = p.env || {};
@@ -24574,177 +24544,194 @@ var require_picocolors = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 }));
 
 //#endregion
-//#region src/sdk/beacon-table.ts
+//#region src/sdk/beacon-document.ts
 var import_picocolors = /* @__PURE__ */ __toESM(require_picocolors(), 1);
-const tableTypes = {
+const tableSections = {
 	fails: {
 		icon: "🚫",
-		log: (message) => {
-			info(import_picocolors.default.red(`${import_picocolors.default.bold("🚫 FAIL")}: ${message}\n\n`));
-		},
 		title: "Fails"
 	},
 	messages: {
 		icon: "📖",
-		log: (message, icon) => {
-			info(`${icon ?? "📖"} ${message}\n\n`);
-		},
 		title: "Messages"
 	},
 	warnings: {
 		icon: "⚠️",
-		log: (message) => {
-			info(import_picocolors.default.yellow(`${import_picocolors.default.bold("⚠️ WARNING")}: ${message}\n\n`));
-		},
 		title: "Warnings"
 	}
 };
-const tableTypesKeys = Object.keys(tableTypes);
-const tableStartTag = (sectionType) => `<!--${sectionType}-section-->`;
-const tableEndTag = (sectionType) => `<!--${sectionType}-section-end-->`;
-const emptyTablesTemplate = tableTypesKeys.map((tableType) => `${tableStartTag(tableType)}${tableEndTag(tableType)}`).join("");
-const tableRowTemplate = ({ message: { message, id, icon }, tableType }) => `<tr${id === void 0 ? "" : ` data-id="${escapeHTML(id)}"`}><td>${icon ?? tableTypes[tableType].icon}</td><td>${message}</td></tr>`;
-const createTable = ({ messages, type }) => {
-	const headerRow = `<tr><th></th><th>${tableTypes[type].title}</th></tr>`;
-	const messageRows = messages.map((message) => tableRowTemplate({
-		message,
-		tableType: type
-	}));
-	for (const { message, icon } of messages) tableTypes[type].log(message, icon);
-	return messageRows.length > 0 ? `<table>${headerRow}${messageRows.join("")}</table>` : "";
-};
-const appendRowToTable = ({ comment, tableType, message }) => {
-	tableTypes[tableType].log(message.message, message.icon);
-	return comment.replace(`</table>${tableEndTag(tableType)}`, `${tableRowTemplate({
-		message,
-		tableType
-	})}</table>${tableEndTag(tableType)}`);
-};
-const escapeRegExp = (value) => value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
-const tableRowWithIdPattern = (id) => `<tr data-id="${escapeRegExp(escapeHTML(id))}">[\\S\\s]*?</tr>`;
-const regexps = {
-	table: (tableType) => new RegExp(`${tableStartTag(tableType)}[\\s\\S]*?${tableEndTag(tableType)}`, "gm"),
-	tableRowWithId: (id) => new RegExp(tableRowWithIdPattern(id), "gm"),
-	tableRowWithIdFirst: (id) => new RegExp(tableRowWithIdPattern(id), "m"),
-	tableWithContent: (tableType) => new RegExp(`${tableStartTag(tableType)}[\\s\\S]*?<td>[\\s\\S]*?${tableEndTag(tableType)}`, "gm")
-};
-const rowPlaceholder = (tableType, id) => `<!--row-placeholder-${tableType}-${escapeHTML(id)}-->`;
-/** Collect all IDs that need processing from contentIdsToUpdate and new table rows. */
-const collectAllIds = ({ contentIdsToUpdate, newTables }) => {
-	const tableContentIds = unique(tableTypesKeys.flatMap((tableType) => newTables[tableType].map(({ id }) => id).filter((id) => id !== void 0)));
-	return unique([...contentIdsToUpdate, ...tableContentIds]);
-};
-/** Append messages to an existing table section, or create a new table if empty. */
-const appendOrCreateTableSection = ({ beacon, messages, tableType }) => {
-	let result = beacon;
-	if (regexps.tableWithContent(tableType).test(result)) for (const message of messages) result = appendRowToTable({
-		comment: result,
-		message,
-		tableType
-	});
-	else {
-		const newTable = `${tableStartTag(tableType)}${createTable({
-			messages,
-			type: tableType
-		})}${tableEndTag(tableType)}`;
-		result = result.replace(regexps.table(tableType), newTable);
-	}
-	return result;
-};
+const tableTypeKeys = [
+	"fails",
+	"messages",
+	"warnings"
+];
+const tableStartTag = (tableType) => `<!--${tableType}-section-->`;
+const tableEndTag = (tableType) => `<!--${tableType}-section-end-->`;
+const markdownStartTag = (id) => `<!--markdown-${id}-->`;
+const markdownEndTag = (id) => `<!--markdown-${id}-end-->`;
+const footerPattern = /<p align="right"><sub>Generated .*?<\/sub><\/p>/g;
+const tableRowPattern = /<tr(?: data-id="([^"]*)")?><td>([\s\S]*?)<\/td><td>([\s\S]*?)<\/td><\/tr>/g;
+const markdownSectionPattern = /<!--markdown-(.+?)-->([\s\S]*?)<!--markdown-\1-end-->/g;
+const tableSectionPattern = (tableType) => new RegExp(`${tableStartTag(tableType)}([\\s\\S]*?)${tableEndTag(tableType)}`);
+/** Inverse of radashi's `escapeHTML`, used when reading `data-id` attributes back. */
+const unescapeHTML = (value) => value.replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&quot;", "\"").replaceAll("&#39;", "'").replaceAll("&amp;", "&");
+const parseTableRows = (sectionContent) => [...sectionContent.matchAll(tableRowPattern)].map(([, id, icon, message]) => ({
+	message: message ?? "",
+	...icon === void 0 ? {} : { icon },
+	...id === void 0 ? {} : { id: unescapeHTML(id) }
+}));
 /**
-* Remove table rows that should be updated
-* based on `contentIdsToUpdate` and new IDs from `newTables`
-*/
-const removeTableRowsThatShouldUpdate = ({ oldBeacon, contentIdsToUpdate, newTables }) => {
-	let newBeacon = oldBeacon;
-	const idsToRemove = collectAllIds({
-		contentIdsToUpdate,
-		newTables
-	});
-	for (const id of idsToRemove) newBeacon = newBeacon.replaceAll(regexps.tableRowWithId(id), "");
-	return newBeacon;
-};
-/**
-* Replace table rows in-place: new rows take the position of the first matching old row,
-* preserving ordering. Remaining old rows with the same ID are removed.
+* Parse a serialized beacon comment body into its structured form.
 *
-* Placeholders are scoped by `(tableType, id)` so the same ID in different
-* table sections cannot collide.
+* Content that is not part of a known section (tables, markdown sections,
+* footer) is dropped — serializing the result normalizes the beacon.
 */
-const replaceTableRowsInPlace = ({ oldBeacon, newTables, contentIdsToUpdate }) => {
-	let newBeacon = oldBeacon;
-	const allIdsToProcess = collectAllIds({
-		contentIdsToUpdate,
-		newTables
-	});
-	for (const tableType of tableTypesKeys) {
-		const sectionRegex = regexps.table(tableType);
-		newBeacon = newBeacon.replace(sectionRegex, (section) => {
-			let updatedSection = section;
-			for (const id of allIdsToProcess) {
-				const placeholder = rowPlaceholder(tableType, id);
-				updatedSection = updatedSection.replace(regexps.tableRowWithIdFirst(id), placeholder);
-				updatedSection = updatedSection.replaceAll(regexps.tableRowWithId(id), "");
-			}
-			return updatedSection;
-		});
-	}
-	for (const tableType of tableTypesKeys) {
-		const rowsByTableType = newTables[tableType];
-		const rowsById = /* @__PURE__ */ new Map();
-		const rowsWithoutId = [];
-		for (const message of rowsByTableType) if (message.id === void 0) rowsWithoutId.push(message);
-		else {
-			const existing = rowsById.get(message.id);
-			if (existing === void 0) rowsById.set(message.id, [message]);
-			else existing.push(message);
+const parseBeacon = (body) => {
+	if (body === void 0 || body === "") return {
+		markdowns: [],
+		tables: {
+			fails: [],
+			messages: [],
+			warnings: []
 		}
-		const appendQueue = [...rowsWithoutId];
-		for (const [id, messages] of rowsById) {
-			const placeholder = rowPlaceholder(tableType, id);
-			if (newBeacon.includes(placeholder)) {
-				const rowsHtml = messages.map((message) => tableRowTemplate({
-					message,
-					tableType
-				})).join("");
-				newBeacon = newBeacon.replace(placeholder, rowsHtml);
-				for (const message of messages) tableTypes[tableType].log(message.message, message.icon);
-			} else appendQueue.push(...messages);
+	};
+	const withoutFooter = body.replaceAll(footerPattern, "");
+	const parseSection = (tableType) => {
+		const sectionContent = tableSectionPattern(tableType).exec(withoutFooter)?.[1];
+		return sectionContent === void 0 ? [] : parseTableRows(sectionContent);
+	};
+	return {
+		markdowns: [...withoutFooter.matchAll(markdownSectionPattern)].map(([, id, content]) => ({
+			id: id ?? "",
+			message: (content ?? "").replace(/^\r?\n\r?\n/, "").replace(/\r?\n$/, "")
+		})),
+		tables: {
+			fails: parseSection("fails"),
+			messages: parseSection("messages"),
+			warnings: parseSection("warnings")
 		}
-		if (appendQueue.length > 0) newBeacon = appendOrCreateTableSection({
-			beacon: newBeacon,
-			messages: appendQueue,
-			tableType
-		});
-	}
-	for (const tableType of tableTypesKeys) for (const id of allIdsToProcess) newBeacon = newBeacon.replaceAll(rowPlaceholder(tableType, id), "");
-	for (const tableType of tableTypesKeys) if (!regexps.tableWithContent(tableType).test(newBeacon)) {
-		const newTable = `${tableStartTag(tableType)}${tableEndTag(tableType)}`;
-		newBeacon = newBeacon.replace(regexps.table(tableType), newTable);
-	}
-	return newBeacon;
+	};
 };
+const tableRowHtml = ({ row, tableType }) => `<tr${row.id === void 0 ? "" : ` data-id="${escapeHTML(row.id)}"`}><td>${row.icon ?? tableSections[tableType].icon}</td><td>${row.message}</td></tr>`;
+const tableHtml = ({ rows, tableType }) => {
+	if (rows.length === 0) return "";
+	return `<table>${`<tr><th></th><th>${tableSections[tableType].title}</th></tr>`}${rows.map((row) => tableRowHtml({
+		row,
+		tableType
+	})).join("")}</table>`;
+};
+/**
+* Serialize the structured beacon back into the comment body string.
+* The optional `footer` content is wrapped in the footer markup at the end.
+*/
+const serializeBeacon = ({ document, footer }) => {
+	return `${tableTypeKeys.map((tableType) => `${tableStartTag(tableType)}${tableHtml({
+		rows: document.tables[tableType],
+		tableType
+	})}${tableEndTag(tableType)}`).join("")}${document.markdowns.map(({ id, message }) => `${markdownStartTag(id)}\n\n${message}\n${markdownEndTag(id)}`).join("")}${footer === void 0 ? "" : `<p align="right"><sub>${footer}</sub></p>`}`;
+};
+/** Collect all IDs that need processing from contentIdsToUpdate and new table rows. */
+const collectIdsToProcess = ({ contentIdsToUpdate, newTables }) => unique([...contentIdsToUpdate, ...tableTypeKeys.flatMap((tableType) => newTables[tableType].map(({ id }) => id).filter((id) => id !== void 0))]);
+const groupRowsById = (rows) => {
+	const rowsById = /* @__PURE__ */ new Map();
+	const rowsWithoutId = [];
+	for (const row of rows) if (row.id === void 0) rowsWithoutId.push(row);
+	else {
+		const group = rowsById.get(row.id);
+		if (group === void 0) rowsById.set(row.id, [row]);
+		else group.push(row);
+	}
+	return {
+		rowsById,
+		rowsWithoutId
+	};
+};
+/**
+* Replace rows in-place: new rows take the position of the first old row with
+* the same ID, preserving ordering. Remaining old rows with a processed ID are
+* removed; new rows without a matching old row are appended at the end.
+*/
+const replaceRowsInPlace = ({ oldRows, newRows, idsToProcess }) => {
+	const { rowsById, rowsWithoutId } = groupRowsById(newRows);
+	const replacedRows = [];
+	const insertedIds = /* @__PURE__ */ new Set();
+	for (const row of oldRows) if (row.id === void 0 || !idsToProcess.includes(row.id)) replacedRows.push(row);
+	else {
+		const group = rowsById.get(row.id);
+		if (group !== void 0 && !insertedIds.has(row.id)) {
+			replacedRows.push(...group);
+			insertedIds.add(row.id);
+		}
+	}
+	const appendQueue = [...rowsWithoutId];
+	for (const [id, group] of rowsById) if (!insertedIds.has(id)) appendQueue.push(...group);
+	return [...replacedRows, ...appendQueue];
+};
+/** Remove old rows with processed IDs and append all new rows at the end of the table. */
+const replaceRowsAppend = ({ oldRows, newRows, idsToProcess }) => [...oldRows.filter((row) => row.id === void 0 || !idsToProcess.includes(row.id)), ...newRows];
 /**
 * Go through all table types and update all of them with data from `newTables`
 */
-const updateTables = ({ oldBeacon, newTables, contentIdsToUpdate, replaceMode = "in-place" }) => {
-	if (replaceMode === "in-place") return replaceTableRowsInPlace({
+const updateTables = ({ document, newTables, contentIdsToUpdate, replaceMode = "in-place" }) => {
+	const idsToProcess = collectIdsToProcess({
 		contentIdsToUpdate,
-		newTables,
-		oldBeacon
+		newTables
 	});
-	let newBeacon = oldBeacon;
-	newBeacon = removeTableRowsThatShouldUpdate({
-		contentIdsToUpdate,
-		newTables,
-		oldBeacon
+	const replaceRows = replaceMode === "in-place" ? replaceRowsInPlace : replaceRowsAppend;
+	return {
+		...document,
+		tables: {
+			fails: replaceRows({
+				idsToProcess,
+				newRows: newTables.fails,
+				oldRows: document.tables.fails
+			}),
+			messages: replaceRows({
+				idsToProcess,
+				newRows: newTables.messages,
+				oldRows: document.tables.messages
+			}),
+			warnings: replaceRows({
+				idsToProcess,
+				newRows: newTables.warnings,
+				oldRows: document.tables.warnings
+			})
+		}
+	};
+};
+/**
+* Go through all markdown sections and update all of them with data from `newMarkdowns`
+*/
+const updateMarkdowns = ({ document, newMarkdowns, contentIdsToUpdate }) => {
+	const idsToRemove = diff(contentIdsToUpdate, newMarkdowns.map(({ id }) => id));
+	let markdowns = document.markdowns.filter(({ id }) => !idsToRemove.includes(id));
+	for (const newMarkdown of newMarkdowns) {
+		const existingIndex = markdowns.findIndex(({ id }) => id === newMarkdown.id);
+		markdowns = existingIndex === -1 ? [...markdowns, newMarkdown] : markdowns.with(existingIndex, newMarkdown);
+	}
+	return {
+		...document,
+		markdowns
+	};
+};
+/**
+* Apply accumulated beacon content to the previous comment body and return the
+* new body: parse → update tables → update markdowns → serialize with footer.
+*/
+const renderBeacon = ({ previousBody, newTables, newMarkdowns, contentIdsToUpdate, replaceMode, footer }) => {
+	return serializeBeacon({
+		document: updateMarkdowns({
+			contentIdsToUpdate,
+			document: updateTables({
+				contentIdsToUpdate,
+				document: parseBeacon(previousBody),
+				newTables,
+				replaceMode
+			}),
+			newMarkdowns
+		}),
+		footer
 	});
-	for (const tableType of tableTypesKeys) newBeacon = appendOrCreateTableSection({
-		beacon: newBeacon,
-		messages: newTables[tableType],
-		tableType
-	});
-	return newBeacon;
 };
 
 //#endregion
@@ -24765,6 +24752,7 @@ const MAX_RETRIES = 5;
 const RETRY_DELAY_MS = 500;
 const JITTER_MIN_FACTOR = .5;
 const WRITE_NONCE_PATTERN = /\n<!--write-nonce:[a-f0-9-]+-->/g;
+const GITHUB_COMMENT_BODY_LIMIT = 65536;
 const findBeaconComment = async (octokit, prContext, commentFooter) => {
 	for await (const page of octokit.paginate.iterator("GET /repos/{owner}/{repo}/issues/{issue_number}/comments", prContext)) {
 		const found = page.data.find((comment) => Boolean(comment.body?.includes(commentFooter)));
@@ -24781,6 +24769,10 @@ const findBeaconComment = async (octokit, prContext, commentFooter) => {
 * verification read, another job overwrote us and we retry up to MAX_RETRIES times,
 * re-fetching the latest body each time to reduce the chance of lost updates under concurrent writers.
 * Retry delays are jittered to desynchronize concurrent jobs.
+*
+* When all attempts fail the returned action is `'failed'` (with an empty `commentBody`)
+* and a warning is logged — the error is not thrown, so the caller decides whether
+* a lost comment update should break the build.
 */
 const commentPr = async ({ githubToken, markdown, commentId }) => {
 	const octokit = getOctokit({ token: githubToken });
@@ -24795,6 +24787,7 @@ const commentPr = async ({ githubToken, markdown, commentId }) => {
 		const bodyContent = typeof markdown === "string" ? markdown : markdown(previousBody);
 		const nonce = `<!--write-nonce:${randomUUID()}-->`;
 		const body = `${bodyContent}\n${nonce}\n${commentFooter}`;
+		if (body.length > GITHUB_COMMENT_BODY_LIMIT) throw new Error(`Comment body length ${body.length} exceeds the GitHub limit of ${GITHUB_COMMENT_BODY_LIMIT} characters.`);
 		if (existingComment === void 0) {
 			await octokit.request("POST /repos/{owner}/{repo}/issues/{issue_number}/comments", {
 				...prContext,
@@ -24819,10 +24812,10 @@ const commentPr = async ({ githubToken, markdown, commentId }) => {
 			commentBody: body
 		};
 		throw new Error("Write was clobbered by a concurrent update.");
-	}).catch(() => {
-		warning(`Failed to update PR comment after ${MAX_RETRIES} attempts due to concurrent updates.`);
+	}).catch((error) => {
+		warning(`Failed to update PR comment after ${MAX_RETRIES} attempts: ${error instanceof Error ? error.message : String(error)}`);
 		return {
-			action: "upsert",
+			action: "failed",
 			commentBody: ""
 		};
 	});
@@ -24830,8 +24823,6 @@ const commentPr = async ({ githubToken, markdown, commentId }) => {
 
 //#endregion
 //#region src/sdk/pr-beacon.ts
-const prContext = getPrContext();
-let prInfoCache;
 /**
 * Default content ID derived from the current workflow and job names.
 * Used to scope beacon content to the job that produced it, enabling
@@ -24843,6 +24834,22 @@ const convertMarkdownToHtml = (message) => g.parse(message, {
 	breaks: true,
 	gfm: true
 });
+/**
+* Loggers keyed by table type, called at accumulation time so each row is
+* logged exactly once regardless of how many times the beacon body is
+* re-rendered (e.g. on concurrent-write retries).
+*/
+const rowLoggers = {
+	fails: (message) => {
+		info(import_picocolors.default.red(`${import_picocolors.default.bold("🚫 FAIL")}: ${message}\n\n`));
+	},
+	messages: (message, icon) => {
+		info(`${icon ?? "📖"} ${message}\n\n`);
+	},
+	warnings: (message) => {
+		info(import_picocolors.default.yellow(`${import_picocolors.default.bold("⚠️ WARNING")}: ${message}\n\n`));
+	}
+};
 /**
 * PR beacon is sticky comment in PR, that has 2 main sections: tables and markdowns
 *
@@ -24866,53 +24873,51 @@ var PrBeacon = class PrBeacon {
 	markdowns = [];
 	githubToken;
 	octokit;
+	prContext = getPrContext();
+	prInfoCache;
 	constructor({ githubToken } = {}) {
 		const token = githubToken ?? process$1.env.GITHUB_TOKEN;
 		if (token === void 0 || token === "") throw new Error("GitHub token is not provided. Please provide it as `githubToken` parameter or set it in `GITHUB_TOKEN` environment variable.");
 		this.githubToken = token;
 		this.octokit = getOctokit({ token: this.githubToken });
 	}
-	_fetchPrInfo = async () => this.octokit.request("GET /repos/{owner}/{repo}/pulls/{pull_number}", prContext);
+	_fetchPrInfo = async () => this.octokit.request("GET /repos/{owner}/{repo}/pulls/{pull_number}", this.prContext);
 	getPrInfo = async () => {
-		if (!prInfoCache) prInfoCache = (await this._fetchPrInfo()).data;
-		return prInfoCache;
+		if (!this.prInfoCache) this.prInfoCache = (await this._fetchPrInfo()).data;
+		return this.prInfoCache;
 	};
 	/**
 	* Helper function to get list of changed files in PR
 	*/
 	getChangedFiles = async () => this.octokit.paginate("GET /repos/{owner}/{repo}/pulls/{pull_number}/files", {
-		...prContext,
+		...this.prContext,
 		per_page: 100
 	});
-	/**
-	* Add fail message to the `Fails` beacon section
-	*/
-	fail(message, { markdownToHtml, ...meta } = {}) {
-		this.tables.fails.push({
+	addTableRow(tableType, message, { markdownToHtml, ...meta }) {
+		rowLoggers[tableType](message, meta.icon);
+		this.tables[tableType].push({
 			id: getDefaultContentId(),
 			message: markdownToHtml === true ? convertMarkdownToHtml(message) : message,
 			...shake(meta, (value) => value === void 0 || value === "")
 		});
+	}
+	/**
+	* Add fail message to the `Fails` beacon section
+	*/
+	fail(message, options = {}) {
+		this.addTableRow("fails", message, options);
 	}
 	/**
 	* Add warning message to the `Warnings` table in the PR beacon
 	*/
-	warn(message, { markdownToHtml, ...meta } = {}) {
-		this.tables.warnings.push({
-			id: getDefaultContentId(),
-			message: markdownToHtml === true ? convertMarkdownToHtml(message) : message,
-			...shake(meta, (value) => value === void 0 || value === "")
-		});
+	warn(message, options = {}) {
+		this.addTableRow("warnings", message, options);
 	}
 	/**
 	* Add message to the `Messages` table in the PR beacon
 	*/
-	message(message, { markdownToHtml, ...meta } = {}) {
-		this.tables.messages.push({
-			id: getDefaultContentId(),
-			message: markdownToHtml === true ? convertMarkdownToHtml(message) : message,
-			...shake(meta, (value) => value === void 0 || value === "")
-		});
+	message(message, options = {}) {
+		this.addTableRow("messages", message, options);
 	}
 	/**
 	* Append markdown to the free format section under all tables in the PR beacon
@@ -24924,16 +24929,12 @@ var PrBeacon = class PrBeacon {
 			...shake(meta, (value) => value === void 0 || value === "")
 		});
 	}
-	static _updateFooter = ({ oldBeacon }) => {
-		let newBeacon = oldBeacon.replaceAll(/<p align="right"><sub>Generated .*?<\/sub><\/p>/gm, "");
-		const humanReadableTime = (/* @__PURE__ */ new Date()).toLocaleString("cs-CZ", {
+	static _buildFooter() {
+		return `Generated <code>${(/* @__PURE__ */ new Date()).toLocaleString("cs-CZ", {
 			timeZone: "Europe/Prague",
 			timeZoneName: "shortOffset"
-		});
-		const headSha = (context.payload.pull_request?.head)?.sha;
-		newBeacon += `<p align="right"><sub>Generated <code>${humanReadableTime}</code> for ${headSha}</sub></p>`;
-		return newBeacon;
-	};
+		})}</code> for ${(context.payload.pull_request?.head)?.sha}`;
+	}
 	/**
 	* Returns true if `prBeacon.fail()` was called before
 	*/
@@ -24946,22 +24947,14 @@ var PrBeacon = class PrBeacon {
 	*/
 	async _submit(options = {}) {
 		const { contentIdsToUpdate = [getDefaultContentId()], replaceMode } = options;
-		const updateReport = (oldBeacon) => {
-			let newBeacon = oldBeacon ?? emptyTablesTemplate;
-			newBeacon = updateTables({
-				contentIdsToUpdate,
-				newTables: this.tables,
-				oldBeacon: newBeacon,
-				replaceMode
-			});
-			newBeacon = updateMarkdowns({
-				contentIdsToUpdate,
-				newMarkdowns: this.markdowns,
-				oldBeacon: newBeacon
-			});
-			newBeacon = PrBeacon._updateFooter({ oldBeacon: newBeacon });
-			return newBeacon;
-		};
+		const updateReport = (oldBeacon) => renderBeacon({
+			contentIdsToUpdate,
+			footer: PrBeacon._buildFooter(),
+			newMarkdowns: this.markdowns,
+			newTables: this.tables,
+			previousBody: oldBeacon,
+			replaceMode
+		});
 		const commentResult = await commentPr({
 			commentId: "PR-BEACON",
 			githubToken: this.githubToken,
